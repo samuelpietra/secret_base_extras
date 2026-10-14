@@ -728,6 +728,23 @@ return function(mod)
       end
     end)
 
+    -- PACK UP finds a decoration by its footprint.  A cursor on a cell only
+    -- this mod's art reaches (the bed's frame in the next column) finds the
+    -- piece too, unless a decoration's footprint is there.
+    wrap(Decor, "markForRemoval", function(original)
+      return function(grid, context, x, y, ...)
+        local marked = original(grid, context, x, y, ...)
+        if #marked > 0 or not state.active then return marked end
+        local cell = state.art[cellKey(x, y)]
+        for _, layer in ipairs(cell and cell.layers or {}) do
+          local footprintLeft = x - layer.piece.art.x - layer.col
+          local retried = original(grid, context, footprintLeft, y, ...)
+          if #retried > 0 then return retried end
+        end
+        return marked
+      end
+    end)
+
     -- PACK UP: the engine restores the metatiles and frees the record; this
     -- drops the pieces from the drawing first, while the record still says
     -- where they were.
