@@ -27,8 +27,13 @@ return function(mod)
   local MOD_ID = "secret_base_extras"
   local VIRTUAL_PAIR = "mod__secret_base_extras"
   local OWN_BASE = 0
-  -- One map row in the engine's override keys (Field.setMetatile).
-  local ROW = 1024
+  -- Cells are keyed the way the engine keys metatile overrides
+  -- (Field.setMetatile), so a key works on layout.overrides too.
+  local MAP_ROW_STRIDE = 1024
+  local function cellKey(x, y) return y * MAP_ROW_STRIDE + x end
+
+  -- Decorations record the bottom-left cell of their footprint.
+  local function footprintTop(bottomY, height) return bottomY - height + 1 end
 
   local ENGINE = {
     collision     = "src.core.game3.collision",
@@ -91,11 +96,15 @@ return function(mod)
 
   local tilesetBySource, tilesetsUnavailable = {}, false
 
+  local function datasetCache()
+    local Dataset = engineModule(ENGINE.dataset)
+    return Dataset and Dataset.cache and Dataset.cache() or nil
+  end
+
   local function tilesetFor(source)
     local tileset = tilesetBySource[source.mapDir]
     if tileset then return tileset end
-    local Dataset = engineModule(ENGINE.dataset)
-    local cache = Dataset and Dataset.cache and Dataset.cache()
+    local cache = datasetCache()
     local why = "no dataset cache"
     if cache then tileset, why = Lib.RomTileset.forMap(cache, source.mapDir, source.pretName) end
     if not tileset then error(why, 0) end
@@ -152,9 +161,9 @@ return function(mod)
 
   -- ------- where the furniture stands in the current base
 
-  -- state.footprint[y * ROW + x] = { piece, row, col, x, y, floorMid, blocked }
+  -- state.footprint[cellKey(x, y)] = { piece, row, col, x, y, floorMid, blocked }
   --   the cells pieces occupy: collision, the A button, overlap checks
-  -- state.art[y * ROW + x] = { x, y, layers = { { placement, piece, row, col }, ... } }
+  -- state.art[cellKey(x, y)] = { x, y, layers = { { placement, piece, row, col }, ... } }
   --   every art cell drawn there, footprint or overhang, in placement order
   -- state.placements[piece.id .. ":" .. left .. ":" .. top] = placement
   --   one token per placed piece, which its art entries carry
@@ -182,8 +191,8 @@ return function(mod)
     if FieldView and FieldView.invalidateCell then FieldView.invalidateCell(x, y) end
   end
 
-  -- left/top is the footprint's top-left cell; decorations record the
-  -- bottom-left.  fn(x, y, row, col) per footprint cell.
+  -- left/top is the footprint's top-left cell.  fn(x, y, row, col) per
+  -- footprint cell.
   local function eachCell(piece, left, top, fn)
     for row = 0, piece.height - 1 do
       for col = 0, piece.width - 1 do
@@ -212,11 +221,11 @@ return function(mod)
     eachCell(piece, left, top, function(x, y, row, col)
       local cell = { piece = piece, row = row, col = col, x = x, y = y,
         floorMid = layout:midAt(x, y), blocked = piece.blocked[row + 1][col + 1] }
-      state.footprint[y * ROW + x] = cell
+      state.footprint[cellKey(x, y)] = cell
       if cell.blocked and Field then Field.setMetatile(x, y, cell.floorMid, true) end
     end)
     eachArtCell(piece, left, top, function(x, y, row, col)
-      local key = y * ROW + x
+      local key = cellKey(x, y)
       state.art[key] = state.art[key] or { x = x, y = y, layers = {} }
       table.insert(state.art[key].layers, { placement = placement, piece = piece, row = row, col = col })
       invalidate(x, y)
@@ -230,10 +239,10 @@ return function(mod)
     local placement = state.placements[placementKey(piece, left, top)]
     state.placements[placementKey(piece, left, top)] = nil
     eachCell(piece, left, top, function(x, y)
-      state.footprint[y * ROW + x] = nil
+      state.footprint[cellKey(x, y)] = nil
     end)
     eachArtCell(piece, left, top, function(x, y)
-      local key = y * ROW + x
+      local key = cellKey(x, y)
       local cell = state.art[key]
       local list = cell and cell.layers or {}
       for i = #list, 1, -1 do
@@ -288,7 +297,7 @@ return function(mod)
       local piece = pieceByDecorId[tonumber(base.decorations[i])]
       if piece then
         local x, y = Decor.decodePos(base.decorationPositions[i])
-        addPiece(layout, piece, x, y - piece.height + 1)
+        addPiece(layout, piece, x, footprintTop(y, piece.height))
       end
     end
   end
@@ -298,7 +307,7 @@ return function(mod)
   local function footprintOverlap(left, top, width, height)
     for y = top, top + height - 1 do
       for x = left, left + width - 1 do
-        if state.footprint[y * ROW + x] then return true end
+        if state.footprint[cellKey(x, y)] then return true end
       end
     end
     return false
@@ -308,7 +317,7 @@ return function(mod)
   -- the layout's own.  PACK UP leaves an override behind too, but one that
   -- restores the original metatile, and that cell is free again.
   local function decorated(layout, x, y)
-    local override = layout.overrides[y * ROW + x]
+    local override = layout.overrides[cellKey(x, y)]
     if not override then return false end
     local cell = layout.cells[y * layout.width + x + 1]
     return not cell or override.mid ~= cell.mid
@@ -324,7 +333,7 @@ return function(mod)
     local Decor = engineModule(ENGINE.decoration)
     local layout = state.layout
     if not (state.active and layout and Decor) then return false end
-    local left, top = place.x, place.y - piece.height + 1
+    local left, top = place.x, footprintTop(place.y, piece.height)
     local function onWall(x, y)
       return x >= 0 and y >= 0 and x < layout.width and y < layout.height
         and Decor.isBeh(grid.behavior(x, y), "SECRET_BASE_NORTH_WALL")
@@ -338,7 +347,7 @@ return function(mod)
       for row = math.max(wallRow, 0), piece.height - 1 do
         local y = top + row
         if x < 0 or y < 0 or x >= layout.width or y >= layout.height
-            or state.footprint[y * ROW + x] or decorated(layout, x, y) then
+            or state.footprint[cellKey(x, y)] or decorated(layout, x, y) then
           return false
         end
         local blocked = piece.blocked[row + 1][col + 1]
@@ -374,8 +383,7 @@ return function(mod)
     if not anim then return nil end
     if animations[piece] ~= nil then return animations[piece] or nil end
     animations[piece] = false
-    local Dataset = engineModule(ENGINE.dataset)
-    local cache = Dataset and Dataset.cache and Dataset.cache()
+    local cache = datasetCache()
     local root = "data/generated/gba/native/" .. anim.pair .. "/"
     local source = cache and cache:read(root .. "anim_manifest.lua")
     local chunk = type(source) == "string" and load(source, "@" .. root .. "anim_manifest.lua")
@@ -427,7 +435,7 @@ return function(mod)
   local function cellPicture(x, y, frameOf)
     local baseMid = state.layout:midAt(x, y)
     local parts, layers = { tostring(baseMid) }, {}
-    local cell = state.art[y * ROW + x]
+    local cell = state.art[cellKey(x, y)]
     for _, layer in ipairs(cell and cell.layers or {}) do
       local on = switchedOn[layer.piece.id] == true
       local layerMid = artMid(layer.piece, layer.row, layer.col, on)
@@ -491,7 +499,7 @@ return function(mod)
 
   -- The cell's mid in this mod's pair, or nil to let the engine draw it.
   local function redirect(x, y)
-    if not (drawingField and state.active and state.art[y * ROW + x]) then return nil end
+    if not (drawingField and state.active and state.art[cellKey(x, y)]) then return nil end
     local Map = engineModule(ENGINE.map)
     if not (Map and Map.current == state.mapId) then return nil end
     local picture = cellPicture(x, y, animationFrame)
@@ -611,8 +619,13 @@ return function(mod)
 
   local ORIGINALS = "__" .. MOD_ID .. "_originals"
 
+  local missingHooks = {}
+
   local function wrap(module, name, make)
-    if not (module and type(module[name]) == "function") then return false end
+    if not (module and type(module[name]) == "function") then
+      missingHooks[#missingHooks + 1] = name
+      return
+    end
     local saved = rawget(module, ORIGINALS)
     if not saved then
       saved = {}
@@ -620,7 +633,6 @@ return function(mod)
     end
     saved[name] = saved[name] or module[name]
     module[name] = make(saved[name])
-    return true
   end
 
   local function install()
@@ -634,20 +646,21 @@ return function(mod)
     local SB = engineModule(ENGINE.secretBase)
     local PcNatives = engineModule(ENGINE.pcNatives)
     local Player = engineModule(ENGINE.player)
-    if not (Decor and DecorInv) then return false end
-
-    local ok = true
+    if not (Decor and DecorInv) then
+      missingHooks[#missingHooks + 1] = "decoration modules"
+      return
+    end
 
     -- --- data
 
     DecorInv.SIZES[CATEGORY.index] = CATEGORY.size
-    ok = wrap(DecorInv, "data", function(original)
+    wrap(DecorInv, "data", function(original)
       return function(...) return addDecorations(original(...)) end
-    end) and ok
+    end)
 
     -- DecorInv.inventories fills in the eight vanilla lists; EXTRA's is added
     -- alongside, so every inventory function that takes a category works on it.
-    ok = wrap(DecorInv, "inventories", function(original)
+    wrap(DecorInv, "inventories", function(original)
       return function(...)
         local inventories = original(...)
         if type(inventories) == "table" then
@@ -657,24 +670,24 @@ return function(mod)
         end
         return inventories
       end
-    end) and ok
+    end)
 
     -- DecorInv.CATEGORY_COUNT stays 8: the trader's menus and the save layout
     -- read it.  The DECORATE screen reads Decor.CATEGORY_COUNT, raised to 9
     -- while it is open from a PC and kept at 8 in the trader's mode, so mod
     -- furniture is never traded away.  Its "no decorations" check counts with
     -- DecorInv.count, which then has to include EXTRA.
-    ok = wrap(DecorInv, "count", function(original)
+    wrap(DecorInv, "count", function(original)
       return function(session, ...)
         local total = original(session, ...)
         if Decor.CATEGORY_COUNT > CATEGORY.index then total = total + DecorInv.countInCategory(CATEGORY.index, session) end
         return total
       end
-    end) and ok
+    end)
 
     -- --- the DECORATE screen
 
-    ok = wrap(DecorUI, "open", function(original)
+    wrap(DecorUI, "open", function(original)
       return function(opts, ...)
         opts = opts or {}
         Decor.CATEGORY_COUNT = CATEGORY.index + 1
@@ -683,53 +696,53 @@ return function(mod)
         opts.draw = screenDraw(opts.draw)
         return original(opts, ...)
       end
-    end) and ok
+    end)
 
-    ok = wrap(DecorUI, "openTrade", function(original)
+    wrap(DecorUI, "openTrade", function(original)
       return function(...)
         Decor.CATEGORY_COUNT = CATEGORY.index
         return original(...)
       end
-    end) and ok
+    end)
 
     -- --- placing and packing up
 
-    ok = wrap(Decor, "canPlace", function(original)
+    wrap(Decor, "canPlace", function(original)
       return function(grid, place, decor, ...)
         local piece = pieceByDecorId[tonumber(decor)]
         if piece then return canPlacePiece(grid, place, piece) end
         -- A vanilla decoration may not land on this mod's furniture either.
         local width, height = Decor.dims(decor)
-        if state.active and footprintOverlap(place.x, place.y - height + 1, width, height) then return false end
+        if state.active and footprintOverlap(place.x, footprintTop(place.y, height), width, height) then return false end
         return original(grid, place, decor, ...)
       end
-    end) and ok
+    end)
 
-    ok = wrap(Decor, "showOnMap", function(original)
+    wrap(Decor, "showOnMap", function(original)
       return function(grid, mapX, mapY, decor, ...)
         local piece = pieceByDecorId[tonumber(decor)]
         if not piece then return original(grid, mapX, mapY, decor, ...) end
         if not (state.active and state.layout) then return false end
-        addPiece(state.layout, piece, mapX, mapY - piece.height + 1)
+        addPiece(state.layout, piece, mapX, footprintTop(mapY, piece.height))
         return true
       end
-    end) and ok
+    end)
 
     -- PACK UP: the engine restores the metatiles and frees the record; this
     -- drops the pieces from the drawing first, while the record still says
     -- where they were.
-    ok = wrap(Decor, "clearNonSprites", function(original)
+    wrap(Decor, "clearNonSprites", function(original)
       return function(grid, context, marked, ...)
         for _, mark in ipairs(marked or {}) do
           local piece = pieceByDecorId[tonumber(context.items[mark.idx])]
           if piece and state.active then
             local x, y = Decor.decodePos(context.pos[mark.idx])
-            removePiece(piece, x, y - piece.height + 1)
+            removePiece(piece, x, footprintTop(y, piece.height))
           end
         end
         return original(grid, context, marked, ...)
       end
-    end) and ok
+    end)
 
     -- --- graphics
 
@@ -740,15 +753,15 @@ return function(mod)
       if not succeeded then error((...), 0) end
       return ...
     end
-    ok = wrap(FieldView, "draw", function(original)
+    wrap(FieldView, "draw", function(original)
       return function(...)
         drawingField = true
         tick()
         return drawn(pcall(original, ...))
       end
-    end) and ok
+    end)
 
-    ok = wrap(Map, "worldMidAt", function(original)
+    wrap(Map, "worldMidAt", function(original)
       return function(x, y, primaryDef)
         if primaryDef == state.def then
           local mid = redirect(x, y)
@@ -756,29 +769,29 @@ return function(mod)
         end
         return original(x, y, primaryDef)
       end
-    end) and ok
+    end)
 
     -- The worker-prepared route of the same lookup (field_view.lua addCell).
-    ok = wrap(Plan, "cell", function(original)
+    wrap(Plan, "cell", function(original)
       return function(plan, x, y)
         local mid = redirect(x, y)
         if mid then return mid, VIRTUAL_PAIR, false, false end
         return original(plan, x, y)
       end
-    end) and ok
+    end)
 
     -- Our pair has no file behind it; once trimmed it could not come back.
-    ok = wrap(NativeTileset, "trim", function(original)
+    wrap(NativeTileset, "trim", function(original)
       return function(keep, ...)
         keep = keep or {}
         keep[VIRTUAL_PAIR] = true
         return original(keep, ...)
       end
-    end) and ok
+    end)
 
     -- --- loading the base
 
-    ok = wrap(SB, "onMapLoad", function(original)
+    wrap(SB, "onMapLoad", function(original)
       return function(...)
         local result = original(...)
         local loaded, err = pcall(onBaseLoaded)
@@ -788,7 +801,7 @@ return function(mod)
         end
         return result
       end
-    end) and ok
+    end)
 
     -- --- using the furniture
 
@@ -796,9 +809,9 @@ return function(mod)
     -- is where the field asks.  A piece runs its script from any side, or, if
     -- fromBelow, only faced from below at its screen row, as the game's PCs
     -- and TVs are (their behaviours' "facing up" rule).
-    ok = wrap(SB, "interactBg", function(original)
+    wrap(SB, "interactBg", function(original)
       return function(x, y, facing, elevation)
-        local cell = state.active and state.footprint[y * ROW + x]
+        local cell = state.active and state.footprint[cellKey(x, y)]
         if cell and inOwnBase(currentSession()) then
           local piece = cell.piece
           if not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) then
@@ -808,27 +821,27 @@ return function(mod)
         end
         return original(x, y, facing, elevation)
       end
-    end) and ok
+    end)
 
     -- DoPCTurnOnEffect / DoPCTurnOffEffect write the Pokemon Center screen
     -- into the tile above the player.  On our PC, light its own screen.
-    ok = wrap(PcNatives, "setPcMetatile", function(original)
+    wrap(PcNatives, "setPcMetatile", function(original)
       return function(scriptContext, on)
         local cell = state.active and Player and Player.facing == "up"
-          and state.footprint[((tonumber(Player.cellY) or 0) - 1) * ROW + (tonumber(Player.cellX) or 0)]
+          and state.footprint[cellKey(tonumber(Player.cellX) or 0, (tonumber(Player.cellY) or 0) - 1)]
         if cell and cell.piece == Lib.Furniture.PC then
           setSwitchedOn(cell.piece, on)
           return nil
         end
         return original(scriptContext, on)
       end
-    end) and ok
+    end)
 
     -- Every TV screen on the map switches through Tv.setScreens (on entering
     -- an indoor map with a show on air, off once it has been watched), which
     -- finds them by their TELEVISION behaviour.  This mod's TV has none, so
     -- it follows the same call.
-    ok = wrap(engineModule(ENGINE.tv), "setScreens", function(original)
+    wrap(engineModule(ENGINE.tv), "setScreens", function(original)
       return function(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         local count = original(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         if state.active and layout == state.layout then
@@ -837,13 +850,13 @@ return function(mod)
         end
         return count
       end
-    end) and ok
+    end)
 
-    return ok
   end
 
-  if not install() then
-    log("this engine version is missing a function the mod wraps; some parts may not work")
+  install()
+  if #missingHooks > 0 then
+    log("this engine version lacks %s; those parts of the mod are off", table.concat(missingHooks, ", "))
   end
 
   mod.events:on("save.writing", function(payload)
