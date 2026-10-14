@@ -1,6 +1,6 @@
 -- Runs the mod's real entry on stand-ins for the engine modules it wraps, then
 -- walks the in-game paths: base load, field draw, TV on/blink/off, PC screen,
--- A on the bed, PACK UP, placement rules.
+-- A on the bed and the stores, PACK UP, placement rules.
 local E = os.getenv("SBE_ENGINE") .. "/"
 local MOD = os.getenv("SBE_MOD") .. "/"
 local EM = os.getenv("SBE_INSTALL") .. "/emerald/"
@@ -27,8 +27,8 @@ function love.load()
     function layout:cellAt(x, y) return self.overrides[y * 1024 + x] or self.cells[y * W + x + 1] end
     local def = { id = "EM_SECRET_BASE_TREE4", pair = "secret_base__secret_base_tree", midLayout = layout }
     local session = { map = def.id, decorationInventory = {}, modData = {},
-      secretBases = { { decorations = { 121, 122, 123, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        decorationPositions = { 3 * 16 + 3, 4 * 16 + 6, 7 * 16 + 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } } }
+      secretBases = { { decorations = { 121, 122, 123, 124, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        decorationPositions = { 3 * 16 + 3, 4 * 16 + 6, 7 * 16 + 9, 11 * 16 + 4, 12 * 16 + 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } } }
     -- floor atlas of the base pair: every mid in slot 0, grey
     local floorImage = love.image.newImageData(16, 16)
     for y = 0, 15 do for x = 0, 15 do floorImage:setPixel(x, y, 0.5, 0.4, 0.3, 1) end end
@@ -73,6 +73,9 @@ function love.load()
     local Player = fake("src.core.game3.player", { facing = "up", cellX = 4, cellY = 5 })
     local PcN = fake("src.core.game3.scripting.natives_pc_rse", { setPcMetatile = function() return "vanilla" end })
     local Tv = fake("src.core.game3.rse.tv", { setScreens = function() return 0 end })
+    -- the ROM's scripts, as the engine's bundle holds them
+    local romScripts = assert(loadstring(slurp(EM .. "data/generated/gba/scripts/scripts.lua")))()
+    local Space = fake("src.core.game3.scripting.space", { bundle = { scripts = romScripts } })
     fake("src.ui.game3.rse.decoration", { open = function(o) return o end, openTrade = function() end, draw = function() end })
     fake("src.core.game3.dataset", { cache = function() return { read = function(_, rel) return slurp(EM .. rel) end } end })
 
@@ -85,7 +88,11 @@ function love.load()
     SB.onMapLoad()
     check("bed foot blocks", layout.overrides[3 * 1024 + 3] ~= nil and layout.overrides[3 * 1024 + 3].coll == 7)
     check("bed pillow walkable", layout.overrides[2 * 1024 + 3] == nil)
-    check("inventory has the three pieces", DecorInv.has(121, session) and DecorInv.has(122, session) and DecorInv.has(123, session))
+    local owned = true
+    for id = 121, 125 do owned = owned and DecorInv.has(id, session) end
+    check("inventory has the five pieces", owned)
+    check("a store's lower cell blocks", layout.overrides[4 * 1024 + 11] ~= nil and layout.overrides[4 * 1024 + 11].coll == 7)
+    check("a store's upper cell is walkable", layout.overrides[3 * 1024 + 11] == nil)
     -- field draw: the furniture cells come from the mod's pair
     local function draw(cellsToSample)
       for _, c in ipairs(cellsToSample) do plannedCell[c] = true end
@@ -93,7 +100,16 @@ function love.load()
     end
     -- Decor.encodePos is x * 16 + y, of the footprint's bottom-left cell
     local bedFoot, bedSide, pcScreen, tvScreen = { 3, 3 }, { 2, 3 }, { 4, 5 }, { 7, 8 }
-    draw({ bedFoot, bedSide, pcScreen, tvScreen })
+    local leagueStore, vitaminStore, leagueTop = { 11, 4 }, { 12, 4 }, { 11, 3 }
+    draw({ bedFoot, bedSide, pcScreen, tvScreen, leagueStore, vitaminStore, leagueTop })
+    check("the two stores are drawn in different colours", plannedCell[leagueStore][2] == "mod__secret_base_extras"
+      and plannedCell[leagueStore][1] ~= plannedCell[vitaminStore][1])
+    -- a signature is 13 characters a pixel, the under picture's 256 then the over one's
+    local topSig = plannedCell[leagueTop][1]
+    local floorPixel = string.format("%.2f%.2f%.2f%.0f", 0.5, 0.4, 0.3, 1)
+    local overArt = false
+    for i = 256, 511 do if topSig:sub(i * 13 + 13, i * 13 + 13) == "1" then overArt = true break end end
+    check("a store's upper cell is drawn over the player, floor under", topSig:sub(1, 256 * 13) == floorPixel:rep(256) and overArt)
     check("bed foot redirected", plannedCell[bedFoot][2] == "mod__secret_base_extras", plannedCell[bedFoot][2])
     check("bed overhang redirected", plannedCell[bedSide][2] == "mod__secret_base_extras")
     check("atlas registered", NT._pairs["mod__secret_base_extras"] ~= nil)
@@ -124,6 +140,25 @@ function love.load()
     check("A on PC screen from below runs the PC", scripts[#scripts] == "EventScript_PC")
     check("A on PC from the side does nothing", SB.interactBg(4, 5, "left") == false)
     check("A elsewhere falls through to the engine", SB.interactBg(9, 9, "up") == "vanilla")
+    -- a store runs its clerk's script: lockall, the welcome, the mart, the
+    -- goodbye, releaseall; no faceplayer, lock or release
+    local function ops(rows)
+      local list = {}
+      for _, row in ipairs(rows or {}) do list[#list + 1] = row.op end
+      return table.concat(list, ",")
+    end
+    local function martOf(rows)
+      for _, row in ipairs(rows or {}) do if row.op == "pokemart" then return row.ptr end end
+    end
+    local CLERK_OPS = "lockall,message,waitmessage,pokemart,loadword,callstd,releaseall,end"
+    SB.interactBg(11, 4, "up")
+    local league = Space.bundle.scripts[scripts[#scripts]]
+    check("A on LEAGUE STORE from below runs the League clerk's script", scripts[#scripts] == "secret_base_extras:league_store"
+      and ops(league) == CLERK_OPS and martOf(league) == "g3:08229624", ops(league))
+    SB.interactBg(12, 4, "up")
+    local vitamin = Space.bundle.scripts[scripts[#scripts]]
+    check("A on VITAMIN STORE from below runs the 3F clerk's script", ops(vitamin) == CLERK_OPS and martOf(vitamin) == "g3:0821fc7c", ops(vitamin))
+    check("A on a store from the side does nothing", SB.interactBg(11, 4, "left") == false)
     -- placement rules
     local MB = require("src.core.game3.mb")
     -- the engine hands out its own behaviour ids, not the ROM's
@@ -133,6 +168,9 @@ function love.load()
     check("TV may not overlap the PC", Decor.canPlace(grid, { x = 4, y = 6, initialX = 11, initialY = 11 }, 123) == false)
     check("TV fits on free floor", Decor.canPlace(grid, { x = 10, y = 6, initialX = 0, initialY = 0 }, 123) == true)
     check("TV set may stand on the north wall", Decor.canPlace(grid, { x = 10, y = 2, initialX = 0, initialY = 0 }, 123) == true)
+    check("a store fits on free floor", Decor.canPlace(grid, { x = 10, y = 11, initialX = 0, initialY = 0 }, 124) == true)
+    check("a store's top may stand on the north wall", Decor.canPlace(grid, { x = 10, y = 2, initialX = 0, initialY = 0 }, 125) == true)
+    check("a store may not stand wholly on the wall", Decor.canPlace(grid, { x = 10, y = 1, initialX = 0, initialY = 0 }, 125) == false)
     -- PUT AWAY aims: the bed's frame column selects the bed, plain floor nothing
     local ctxMarks = { items = session.secretBases[1].decorations, pos = session.secretBases[1].decorationPositions, size = 16 }
     local aim = { metatile = function() return 0 end, metatileId = function() return nil end }

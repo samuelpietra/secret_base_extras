@@ -25,6 +25,10 @@
 -- `bottom` says what to keep of each art cell's bottom layer: false drops it
 -- all, `keep` chooses per cell, `mask` chooses per pixel.
 -- `topOver` puts a cell's top layer over the player whatever its layer type.
+-- `over` puts a whole cell, both layers, over the player, so they pass
+-- behind it.
+-- `recolor` paints palette slots in other slots' colours, { [from] = to },
+-- slots as RomTileset numbers them (palette * 16 + colour).
 -- `wallRows` is how many of the top rows may stand on the base's north wall;
 -- rows above one that does hang over the wall's top and are not checked.
 -- `cellsOn` is the art while the piece is switched on (a PC in use, a TV with
@@ -33,6 +37,8 @@
 -- anim_manifest.lua gives its frames, period and where that cell's mid is.
 -- `script` is what A runs on the piece: from any side, or with `fromBelow`
 -- only facing up at row `screenRow`, as the game's own PCs and TVs ask.
+-- `clerk` instead names a shop clerk's script (its key in the ROM's
+-- scripts), which A runs as the clerk would.
 
 return function()
   local Furniture = {}
@@ -47,6 +53,8 @@ return function()
   local POKEMON_CENTER = { mapDir = "2_2", pretName = "OldaleTown_PokemonCenter_1F" }
   -- The houses' TV: the Building primary's set over a GenericBuilding stand.
   local HOUSE = { mapDir = "15_5", pretName = "SootopolisCity_House1" }
+  -- The vending machines on the Lilycove Department Store's rooftop.
+  local ROOFTOP = { mapDir = "13_21", pretName = "LilycoveCity_DepartmentStoreRooftop" }
 
   -- The bedroom's bottom layer draws the bed's frame over the floorboards in
   -- the same 8x8 tiles, so it carries this mask: '#' is bed, '.' is floor.
@@ -207,7 +215,57 @@ return function()
     },
   }
 
-  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV }
+  -- A vending machine of LilycoveCity_DepartmentStoreRooftop (columns 9 and
+  -- 10), selling what a clerk elsewhere sells.  Its two metatiles fill two
+  -- cells exactly, bottom layer only and no floor in it, so it lines up with
+  -- the base's decorations as it is.  The lower cell blocks and the player
+  -- shops from the cell below it, facing up; the upper one, drawn over the
+  -- player, lets them walk behind the machine (on the rooftop it stands on
+  -- the wall).  The two machines differ in the colours of their panel, cans
+  -- and labels: slots 117, 118 and 121 of the machine's palette 7, painted in
+  -- other colours of that same palette.  A runs the clerk's own script
+  -- ("Welcome! How may I serve you?", the mart, "Please come again!"): same
+  -- items, same prices.
+  local function vendingMachine(piece)
+    piece.shape = 5 -- DECORSHAPE_1x2
+    piece.width, piece.height = 1, 2
+    piece.fromBelow, piece.screenRow = true, 1
+    piece.blocked = { { false }, { true } }
+    -- like a vanilla plant (BEHIND_FLOOR): the top row may stand on the wall
+    piece.wallRows = 1
+    piece.source = ROOFTOP
+    piece.art.x = 0
+    piece.art.cells = { { 0x26F }, { 0x277 } }
+    piece.art.bottom = { keep = { { true }, { true } } }
+    piece.art.over = { { true }, { false } }
+    return piece
+  end
+
+  -- EverGrandeCity_PokemonLeague_1F_EventScript_Clerk's mart: ULTRA BALL,
+  -- HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL.
+  -- Red panel, white cans, yellow labels.
+  Furniture.LEAGUE_STORE = vendingMachine({
+    id = "league_store",
+    decorId = 124,
+    name = "LEAGUE STORE",
+    description = "Sells what the\nPOKéMON LEAGUE's\nclerk sells.",
+    clerk = "g3:0822960a", -- EverGrandeCity_PokemonLeague_1F_EventScript_Clerk
+    art = { recolor = { [117] = 120, [118] = 116, [121] = 123 } },
+  })
+
+  -- LilycoveCity_DepartmentStore_3F_EventScript_ClerkLeft's mart: PROTEIN,
+  -- CALCIUM, IRON, ZINC, CARBOS, HP UP.  Purple panel, peach cans, yellow
+  -- labels.
+  Furniture.VITAMIN_STORE = vendingMachine({
+    id = "vitamin_store",
+    decorId = 125,
+    name = "VITAMIN STORE",
+    description = "Sells the vitamins\nof LILYCOVE's\nDEPT. STORE.",
+    clerk = "g3:0821fc65", -- LilycoveCity_DepartmentStore_3F_EventScript_ClerkLeft
+    art = { recolor = { [117] = 124, [118] = 125, [121] = 123 } },
+  })
+
+  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.LEAGUE_STORE, Furniture.VITAMIN_STORE }
 
   return Furniture
 end

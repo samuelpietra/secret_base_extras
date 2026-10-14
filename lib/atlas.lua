@@ -24,13 +24,13 @@ return function(Lib)
     end
   end
 
-  local function paint(target, slotX, slotY, tileset, layer, keep)
+  local function paint(target, slotX, slotY, tileset, layer, keep, recolor)
     for i = 1, 256 do
       local slot = layer[i]
       if slot ~= 0 then
         local x, y = (i - 1) % CELL, math.floor((i - 1) / CELL)
         if not keep or keep(x, y) then
-          local r, g, b = tileset:color(slot)
+          local r, g, b = tileset:color(recolor and recolor[slot] or slot)
           target:setPixel(slotX + x, slotY + y, r, g, b, 1)
         end
       end
@@ -77,13 +77,17 @@ return function(Lib)
       end
       for _, layer in ipairs(cell.layers) do
         local tileset = layer.tileset
-        paint(under, slotX, slotY, tileset, layer.pixels or tileset:layer(layer.mid, 0), bottomKeep(layer.piece, layer.row, layer.col))
+        local art = layer.piece.art
+        local recolor = art.recolor
+        local cellOver = art.over and art.over[layer.row + 1][layer.col + 1]
+        paint(cellOver and over or under, slotX, slotY, tileset, layer.pixels or tileset:layer(layer.mid, 0),
+          bottomKeep(layer.piece, layer.row, layer.col), recolor)
         local top = tileset:layer(layer.mid, 1)
-        local topOver = layer.piece.art.topOver and layer.piece.art.topOver[layer.row + 1][layer.col + 1]
+        local topOver = cellOver or (art.topOver and art.topOver[layer.row + 1][layer.col + 1])
         if not topOver and tileset:layerType(layer.mid) == Lib.RomTileset.LAYER.COVERED then
-          paint(under, slotX, slotY, tileset, top)
+          paint(under, slotX, slotY, tileset, top, nil, recolor)
         else
-          paint(over, slotX, slotY, tileset, top)
+          paint(over, slotX, slotY, tileset, top, nil, recolor)
         end
       end
       atlas.midToSlot[slot] = slot

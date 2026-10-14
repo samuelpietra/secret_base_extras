@@ -37,6 +37,8 @@ function love.load()
     add(V.Furniture.PC, V.Furniture.PC.art.cellsOn, 5, 0)
     add(V.Furniture.TV, V.Furniture.TV.art.cells, 7, 0)
     add(V.Furniture.TV, V.Furniture.TV.art.cellsOn, 8, 0)
+    add(V.Furniture.LEAGUE_STORE, V.Furniture.LEAGUE_STORE.art.cells, 11, 0)
+    add(V.Furniture.VITAMIN_STORE, V.Furniture.VITAMIN_STORE.art.cells, 12, 0)
     -- the TV-on animation frames, as the mod reads them
     local blob = slurp(EM .. "data/generated/gba/native/building__generic_building/anim_building_tv_turned_on.idx")
     if blob:byte(1) == 0x78 then blob = love.data.decompress("string", "zlib", blob) end
@@ -47,8 +49,8 @@ function love.load()
       place[#place + 1] = { 9 + f, 1 }
     end
     local ts, mids = V.Atlas.build("t", floorTs, NT, list)
-    local out = love.image.newImageData(11 * 16, 4 * 16)
-    for y = 0, 63 do for x = 0, 175 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
+    local out = love.image.newImageData(13 * 16, 4 * 16)
+    for y = 0, 63 do for x = 0, 207 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
     for i, p in ipairs(place) do
       local s = mids[i]
       for _, img in ipairs({ ts.imageData, ts.overImageData }) do

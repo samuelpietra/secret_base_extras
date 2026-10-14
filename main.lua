@@ -3,8 +3,10 @@
 -- Adds an EXTRA category to the Secret Base DECORATE menu holding furniture
 -- the game has elsewhere: a bed (the bedroom one; resting in it heals the
 -- party with the Weather Institute's bed script), a Pokemon Center PC (item
--- storage and the boxes) and a TV (the houses' one, with every show the
--- game's TVs have).  All are given to the player outright and are placed,
+-- storage and the boxes), a TV (the houses' one, with every show the game's
+-- TVs have) and two of the Lilycove rooftop's vending machines, selling what
+-- the Pokemon League's clerk and the Department Store 3F's left clerk sell.
+-- All are given to the player outright and are placed,
 -- packed up and saved like any other decoration (lib/furniture.lua).
 --
 -- What the engine already does for every decoration, it does for these:
@@ -56,6 +58,7 @@ return function(mod)
     romText       = "src.core.game3.rom_text",
     rse           = "src.core.game3.rse.init",
     runtime       = "src.core.game3.runtime",
+    scriptSpace   = "src.core.game3.scripting.space",
     secretBase    = "src.core.game3.rse.secret_base",
     window        = "src.ui.game3.window",
   }
@@ -824,6 +827,38 @@ return function(mod)
 
     -- --- using the furniture
 
+    -- A clerk piece runs its clerk's script from the ROM, put under a key of
+    -- this mod's own beside it in the engine's script bundle (Space.scriptKey
+    -- finds a script by its key there), with what needs a person taken out:
+    -- no one to face, and the lock and release of every object a background
+    -- event's script uses (lockall/releaseall, as the rooftop machine does).
+    local CLERK_ROWS = {
+      lock = { op = "lockall", opcode = 105 },
+      release = { op = "releaseall", opcode = 107 },
+      faceplayer = false,
+    }
+    local function clerkScript(piece)
+      local Space = engineModule(ENGINE.scriptSpace)
+      local scripts = Space and Space.bundle and Space.bundle.scripts
+      if type(scripts) ~= "table" then return nil end
+      local key = MOD_ID .. ":" .. piece.id
+      if rawget(scripts, key) == nil then
+        local clerk = scripts[piece.clerk]
+        if type(clerk) ~= "table" then
+          log("%s: no clerk script %s", piece.id, tostring(piece.clerk))
+          return nil
+        end
+        local rows = {}
+        for _, row in ipairs(clerk) do
+          local replacement = CLERK_ROWS[row.op]
+          if replacement == nil then rows[#rows + 1] = row
+          elseif replacement then rows[#rows + 1] = replacement end
+        end
+        rawset(scripts, key, rows)
+      end
+      return key
+    end
+
     -- pokeemerald/src/field_control_avatar.c GetInteractedBackgroundEventScript
     -- is where the field asks.  A piece runs its script from any side, or, if
     -- fromBelow, only faced from below at its screen row, as the game's PCs
@@ -834,7 +869,8 @@ return function(mod)
         if cell and inOwnBase(currentSession()) then
           local piece = cell.piece
           if not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) then
-            return SB.startScript(piece.script)
+            local label = piece.clerk and clerkScript(piece) or piece.script
+            return label ~= nil and SB.startScript(label)
           end
           return false
         end

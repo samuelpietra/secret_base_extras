@@ -2,7 +2,7 @@
 local MOD = os.getenv("SBE_MOD") .. "/"
 local ALLOWED = { ipairs = true, pairs = true, pcall = true, error = true, tostring = true, tonumber = true,
   type = true, math = true, string = true, table = true, love = true, load = true, require = true,
-  print = true, rawget = true, setmetatable = true, select = true, unpack = true }
+  print = true, rawget = true, rawset = true, setmetatable = true, select = true, unpack = true }
 local function slurp(p) local f = io.open(p, "rb"); local s = f:read("*a"); f:close(); return s end
 function love.load()
   local util = require("jit.util")

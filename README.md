@@ -9,9 +9,14 @@ that a Secret Base never offered:
 | **BED** | your bedroom | Rest in it to heal your party. You can walk onto the pillow and lie under the blanket. |
 | **PC** | the Pokémon Centers | Item storage and the Pokémon boxes. Its screen lights up while in use. |
 | **TV** | the NPC houses | Every show on air, like any TV in the game: it lights up and blinks when there is something new to watch and switches off once you have watched it. |
+| **LEAGUE STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Pokémon League's clerk sells: ULTRA BALL, HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL. Red panel. |
+| **VITAMIN STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the 3F's left clerk sells: PROTEIN, CALCIUM, IRON, ZINC, CARBOS, HP UP. Purple panel. |
 
-Each piece behaves exactly as its original does: same scripts, same collision,
-same animation. They are placed, packed up and moved with the regular
+The BED, PC and TV behave exactly as their originals do: same scripts, same
+collision, same animation. The two stores are the rooftop's vending machine,
+recoloured from its own palette so they tell apart, and greet you as their
+clerk does ("Welcome! How may I serve you?") before opening the same shop,
+with the same items and prices. They are placed, packed up and moved with the regular
 DECORATE and PACK UP commands, and saved with your base.
 
 ## Requirements
@@ -60,7 +65,7 @@ screen is not enough.
 
 At the PC in your own Secret Base, choose **DECORATION → DECORATE**. The
 category list scrolls, like the Start menu does, to fit **EXTRA** after the
-eight vanilla categories. The three pieces are already in it: the mod gives
+eight vanilla categories. The five pieces are already in it: the mod gives
 them to you, and gives back any you toss.
 
 ### Where each piece may stand
@@ -73,6 +78,10 @@ them to you, and gives back any you toss.
   set, which blocks, and a base you stand on to use them, facing up. They may
   stand in the middle of a room or against the north wall, with the top, or the
   top and the set, over the wall.
+- **LEAGUE STORE** and **VITAMIN STORE** occupy two cells, like a vanilla
+  plant: the lower one blocks and you shop from the cell below it, facing up;
+  the upper one you can walk behind. Their top cell may stand over the north
+  wall.
 
 ## Saves, and removing the mod
 
