@@ -20,8 +20,8 @@
 --   collision  metatile overrides on the blocking cells, as decorations use;
 --   A button   a wrap of SB.interactBg, which the field asks about every tile
 --              the player faces in an RSE map;
---   the save   written as if this mod were not there (see "the save" below),
---              so removing the mod leaves a save the game fully understands.
+--   the save   written as if this mod were not there (lib/save_compat.lua), so
+--              removing the mod leaves a save the game fully understands.
 
 return function(mod)
   local MOD_ID = "secret_base_extras"
@@ -80,6 +80,7 @@ return function(mod)
   V.Furniture = libChunk("furniture")
   V.Atlas = libChunk("atlas")
   V.Menu = libChunk("menu")
+  V.SaveCompat = libChunk("save_compat")
 
   local CATEGORY = V.Furniture.CATEGORY
   local PIECES = V.Furniture.PIECES
@@ -244,131 +245,20 @@ return function(mod)
     state.ts = nil
   end
 
-  -- ------- the save
-  --
-  -- Every save is written as if this mod were not installed: the vanilla
-  -- structures never hold its decoration ids, which the game (or this engine
-  -- without the mod, or a .sav export) knows nothing of.  The furniture placed
-  -- in the base travels in save.modData[MOD_ID].placed instead (the bucket the
-  -- engine keeps for this mod, src/core/Game3.lua) and goes back into the
-  -- base's decoration slots when a save is loaded with the mod.
-  -- The EXTRA inventory list is not saved at all: ensureOwned gives the
-  -- pieces again on load.  The live session is never touched by the save;
-  -- only the table about to be written is, and only by replacing a field with
-  -- a cleaned copy, since it shares its subtables with the session.
+  -- ------- the save (lib/save_compat.lua)
 
-  local SECRET_BASE_VISIT = 31 -- src/core/game3/rse/tv.lua Tv.TVSHOW_SECRET_BASE_VISIT
-
-  local function shallow(t)
-    local out = {}
-    for k, v in pairs(t) do out[k] = v end
-    return out
+  local function saveContext()
+    local Decor, SB = engineModule(ENGINE.decoration), engineModule(ENGINE.secretBase)
+    return {
+      modId = MOD_ID, extraCategory = CATEGORY.index, maxDecorations = Decor.MAX_SECRET_BASE,
+      pieceByDecorId = byDecorId, log = log,
+      ownBase = function(session) return SB.base(session, OWN_BASE) end,
+      decodePosition = Decor.decodePos, decorationSize = Decor.dims,
+    }
   end
 
-  local function writeClean(save)
-    local Decor = engineModule(ENGINE.decoration)
-    local placed = {}
-    local bases = save.secretBases
-    local own = type(bases) == "table" and bases[1]
-    if type(own) == "table" and type(own.decorations) == "table" and Decor then
-      local base = shallow(own)
-      base.decorations, base.decorationPositions = {}, {}
-      for i = 1, Decor.MAX_SECRET_BASE do
-        local decor = tonumber(own.decorations[i]) or 0
-        local pos = type(own.decorationPositions) == "table" and tonumber(own.decorationPositions[i]) or 0
-        if byDecorId[decor] then
-          placed[#placed + 1] = { decor = decor, pos = pos }
-          decor, pos = 0, 0
-        end
-        base.decorations[i], base.decorationPositions[i] = decor, pos
-      end
-      bases = shallow(bases)
-      bases[1] = base
-      save.secretBases = bases
-    end
-    if type(save.decorationInventory) == "table" and save.decorationInventory[CATEGORY.index] ~= nil then
-      local inv = shallow(save.decorationInventory)
-      inv[CATEGORY.index] = nil
-      save.decorationInventory = inv
-    end
-    -- The Secret Base visit show lists the decorations the player put out.
-    if type(save.tvShows) == "table" then
-      local shows
-      for i, show in pairs(save.tvShows) do
-        if type(show) == "table" and tonumber(show.kind) == SECRET_BASE_VISIT and type(show.decorations) == "table" then
-          local kept, dropped = {}, false
-          for _, d in ipairs(show.decorations) do
-            if byDecorId[tonumber(d)] then dropped = true else kept[#kept + 1] = d end
-          end
-          if dropped then
-            shows = shows or shallow(save.tvShows)
-            local copy = shallow(show)
-            copy.decorations, copy.numDecorations = kept, #kept
-            shows[i] = copy
-          end
-        end
-      end
-      if shows then save.tvShows = shows end
-    end
-    local modData = shallow(type(save.modData) == "table" and save.modData or {})
-    local bucket = shallow(type(modData[MOD_ID]) == "table" and modData[MOD_ID] or {})
-    -- Pieces a loaded save carried that never made it back into the base
-    -- (restorePlaced did not run) are kept, not dropped.
-    local inBase = {}
-    for _, e in ipairs(placed) do inBase[e.decor] = true end
-    for _, e in ipairs(type(bucket.placed) == "table" and bucket.placed or {}) do
-      if byDecorId[tonumber(e.decor)] and not inBase[tonumber(e.decor)] then placed[#placed + 1] = e end
-    end
-    bucket.placed = #placed > 0 and placed or nil
-    modData[MOD_ID] = bucket
-    save.modData = modData
-  end
-
-  -- Puts the furniture a save carried in modData back into the base's
-  -- decoration slots, once.  A piece whose cells a vanilla decoration took
-  -- meanwhile (the mod was off) stays in the PC instead.
-  local function restorePlaced(sess)
-    local record = type(sess) == "table" and type(sess.modData) == "table" and sess.modData[MOD_ID]
-    if type(record) ~= "table" or type(record.placed) ~= "table" then return end
-    local placed = record.placed
-    record.placed = nil
-    local SB, Decor = engineModule(ENGINE.secretBase), engineModule(ENGINE.decoration)
-    local base = SB and Decor and SB.base(sess, OWN_BASE)
-    if type(base) ~= "table" or type(base.decorations) ~= "table" then return end
-    base.decorationPositions = type(base.decorationPositions) == "table" and base.decorationPositions or {}
-    local taken = {}
-    for i = 1, Decor.MAX_SECRET_BASE do
-      local decor = tonumber(base.decorations[i]) or 0
-      if decor ~= 0 then
-        local x, y = Decor.decodePos(base.decorationPositions[i])
-        local w, h = Decor.dims(decor)
-        for cy = y - h + 1, y do
-          for cx = x, x + w - 1 do taken[cy * ROW + cx] = true end
-        end
-      end
-    end
-    for _, entry in ipairs(placed) do
-      local piece = byDecorId[tonumber(entry.decor)]
-      local x, y = Decor.decodePos(entry.pos)
-      local free = piece ~= nil
-      for cy = y - (piece and piece.height or 1) + 1, y do
-        for cx = x, x + (piece and piece.width or 1) - 1 do
-          if taken[cy * ROW + cx] then free = false end
-        end
-      end
-      local slot
-      for i = 1, Decor.MAX_SECRET_BASE do
-        if (tonumber(base.decorations[i]) or 0) == 0 then slot = i break end
-      end
-      if free and slot then
-        base.decorations[slot], base.decorationPositions[slot] = piece.decorId, tonumber(entry.pos) or 0
-        for cy = y - piece.height + 1, y do
-          for cx = x, x + piece.width - 1 do taken[cy * ROW + cx] = true end
-        end
-      else
-        log("%s at %s stays in the PC: its place is taken", tostring(entry.decor), tostring(entry.pos))
-      end
-    end
+  local function restorePlaced(session)
+    V.SaveCompat.restorePlaced(session, saveContext())
   end
 
   -- Runs after the engine has laid the base's own decorations out.  The
@@ -957,7 +847,7 @@ return function(mod)
   end
 
   mod.events:on("save.writing", function(payload)
-    local cleaned, err = pcall(writeClean, payload and payload.save or {})
+    local cleaned, err = pcall(function() V.SaveCompat.writeClean(payload.save, saveContext()) end)
     if not cleaned then log("save written with the mod's furniture in it: %s", tostring(err)) end
   end)
   mod.events:on("save.loaded", function(payload)
