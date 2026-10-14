@@ -5,7 +5,7 @@
 -- party with the Weather Institute's bed script), a Pokemon Center PC (item
 -- storage and the boxes), a TV (the houses' one, with every show the game's
 -- TVs have) and two of the Lilycove rooftop's vending machines, selling what
--- the Pokemon League's clerk and the Department Store 3F's left clerk sell.
+-- the Battle Frontier's clerk and the Department Store 2F's left clerk sell.
 -- All are given to the player outright and are placed,
 -- packed up and saved like any other decoration (lib/furniture.lua).
 --

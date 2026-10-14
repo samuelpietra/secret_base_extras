@@ -1,7 +1,7 @@
 {
   "id": "secret_base_extras",
   "name": "Secret Base Extras",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "api": 2,
   "entry": "main.lua",
   "profile": "content",
@@ -18,5 +18,5 @@
     "engine_internals"
   ],
   "affects_link": false,
-  "description": "Adds an EXTRA category to the Secret Base DECORATE menu with furniture the game has elsewhere: the bedroom bed (rest in it to heal your party), a Pokemon Center PC (item storage and the boxes) and the houses' TV (with every show on air), plus two Lilycove rooftop vending machines selling the Pokemon League clerk's items and the Dept. Store 3F vitamins. Saves stay readable without the mod."
+  "description": "Adds an EXTRA category to the Secret Base DECORATE menu with furniture the game has elsewhere: the bedroom bed (rest in it to heal your party), a Pokemon Center PC (item storage and the boxes) and the houses' TV (with every show on air), plus two Lilycove rooftop vending machines selling the Battle Frontier clerk's items and the Dept. Store 2F's catching goods. Saves stay readable without the mod."
 }

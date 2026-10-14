@@ -241,31 +241,33 @@ return function()
     return piece
   end
 
-  -- EverGrandeCity_PokemonLeague_1F_EventScript_Clerk's mart: ULTRA BALL,
-  -- HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL.
-  -- Red panel, white cans, yellow labels.
-  Furniture.LEAGUE_STORE = vendingMachine({
-    id = "league_store",
+  -- BattleFrontier_Mart_EventScript_Clerk's mart: ULTRA BALL, HYPER POTION,
+  -- MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL and the six
+  -- vitamins, the Pokemon League clerk's and the Department Store 3F left
+  -- clerk's lists together.  Red panel, white cans, yellow labels.
+  Furniture.BATTLE_STORE = vendingMachine({
+    id = "battle_store",
     decorId = 124,
-    name = "LEAGUE STORE",
-    description = "Sells what the\nPOKéMON LEAGUE's\nclerk sells.",
-    clerk = "g3:0822960a", -- EverGrandeCity_PokemonLeague_1F_EventScript_Clerk
+    name = "BATTLE STORE",
+    description = "Sells what the\nBATTLE FRONTIER's\nclerk sells.",
+    clerk = "g3:08267acc", -- BattleFrontier_Mart_EventScript_Clerk
     art = { recolor = { [117] = 120, [118] = 116, [121] = 123 } },
   })
 
-  -- LilycoveCity_DepartmentStore_3F_EventScript_ClerkLeft's mart: PROTEIN,
-  -- CALCIUM, IRON, ZINC, CARBOS, HP UP.  Purple panel, peach cans, yellow
-  -- labels.
-  Furniture.VITAMIN_STORE = vendingMachine({
-    id = "vitamin_store",
+  -- LilycoveCity_DepartmentStore_2F_EventScript_ClerkLeft's mart, what
+  -- catching takes: POKé BALL, GREAT BALL, ULTRA BALL, ESCAPE ROPE, FULL
+  -- HEAL, ANTIDOTE, PARLYZ HEAL, BURN HEAL, ICE HEAL, AWAKENING, FLUFFY TAIL.
+  -- Purple panel, peach cans, yellow labels.
+  Furniture.HUNTING_STORE = vendingMachine({
+    id = "hunting_store",
     decorId = 125,
-    name = "VITAMIN STORE",
-    description = "Sells the vitamins\nof LILYCOVE's\nDEPT. STORE.",
-    clerk = "g3:0821fc65", -- LilycoveCity_DepartmentStore_3F_EventScript_ClerkLeft
+    name = "HUNTING STORE",
+    description = "Sells BALLS and\nthe goods of\nLILYCOVE's 2F.",
+    clerk = "g3:0821fb48", -- LilycoveCity_DepartmentStore_2F_EventScript_ClerkLeft
     art = { recolor = { [117] = 124, [118] = 125, [121] = 123 } },
   })
 
-  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.LEAGUE_STORE, Furniture.VITAMIN_STORE }
+  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.BATTLE_STORE, Furniture.HUNTING_STORE }
 
   return Furniture
 end

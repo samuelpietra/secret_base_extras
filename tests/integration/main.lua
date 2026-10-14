@@ -100,12 +100,12 @@ function love.load()
     end
     -- Decor.encodePos is x * 16 + y, of the footprint's bottom-left cell
     local bedFoot, bedSide, pcScreen, tvScreen = { 3, 3 }, { 2, 3 }, { 4, 5 }, { 7, 8 }
-    local leagueStore, vitaminStore, leagueTop = { 11, 4 }, { 12, 4 }, { 11, 3 }
-    draw({ bedFoot, bedSide, pcScreen, tvScreen, leagueStore, vitaminStore, leagueTop })
-    check("the two stores are drawn in different colours", plannedCell[leagueStore][2] == "mod__secret_base_extras"
-      and plannedCell[leagueStore][1] ~= plannedCell[vitaminStore][1])
+    local battleStore, huntStore, battleTop = { 11, 4 }, { 12, 4 }, { 11, 3 }
+    draw({ bedFoot, bedSide, pcScreen, tvScreen, battleStore, huntStore, battleTop })
+    check("the two stores are drawn in different colours", plannedCell[battleStore][2] == "mod__secret_base_extras"
+      and plannedCell[battleStore][1] ~= plannedCell[huntStore][1])
     -- a signature is 13 characters a pixel, the under picture's 256 then the over one's
-    local topSig = plannedCell[leagueTop][1]
+    local topSig = plannedCell[battleTop][1]
     local floorPixel = string.format("%.2f%.2f%.2f%.0f", 0.5, 0.4, 0.3, 1)
     local overArt = false
     for i = 256, 511 do if topSig:sub(i * 13 + 13, i * 13 + 13) == "1" then overArt = true break end end
@@ -152,12 +152,12 @@ function love.load()
     end
     local CLERK_OPS = "lockall,message,waitmessage,pokemart,loadword,callstd,releaseall,end"
     SB.interactBg(11, 4, "up")
-    local league = Space.bundle.scripts[scripts[#scripts]]
-    check("A on LEAGUE STORE from below runs the League clerk's script", scripts[#scripts] == "secret_base_extras:league_store"
-      and ops(league) == CLERK_OPS and martOf(league) == "g3:08229624", ops(league))
+    local battle = Space.bundle.scripts[scripts[#scripts]]
+    check("A on BATTLE STORE from below runs the Battle Frontier clerk's script", scripts[#scripts] == "secret_base_extras:battle_store"
+      and ops(battle) == CLERK_OPS and martOf(battle) == "g3:08267ae4", ops(battle))
     SB.interactBg(12, 4, "up")
-    local vitamin = Space.bundle.scripts[scripts[#scripts]]
-    check("A on VITAMIN STORE from below runs the 3F clerk's script", ops(vitamin) == CLERK_OPS and martOf(vitamin) == "g3:0821fc7c", ops(vitamin))
+    local hunt = Space.bundle.scripts[scripts[#scripts]]
+    check("A on HUNTING STORE from below runs the 2F left clerk's script", ops(hunt) == CLERK_OPS and martOf(hunt) == "g3:0821fb60", ops(hunt))
     check("A on a store from the side does nothing", SB.interactBg(11, 4, "left") == false)
     -- placement rules
     local MB = require("src.core.game3.mb")

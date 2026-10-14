@@ -9,8 +9,8 @@ that a Secret Base never offered:
 | **HEALING BED** | your bedroom | Rest in it to heal your party. You can walk onto the pillow and lie under the blanket. |
 | **PKMN CENTER PC** | the Pokémon Centers | Item storage and the Pokémon boxes. Its screen lights up while in use. |
 | **STANDARD TV** | the NPC houses | Every show on air, like any TV in the game: it lights up and blinks when there is something new to watch and switches off once you have watched it. |
-| **LEAGUE STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Pokémon League's clerk sells: ULTRA BALL, HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL. Red panel. |
-| **VITAMIN STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the 3F's left clerk sells: PROTEIN, CALCIUM, IRON, ZINC, CARBOS, HP UP. Purple panel. |
+| **BATTLE STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Battle Frontier's clerk sells: ULTRA BALL, HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL, PROTEIN, CALCIUM, IRON, ZINC, CARBOS, HP UP. Red panel. |
+| **HUNTING STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Dept. Store 2F's left clerk sells, for catching: POKé BALL, GREAT BALL, ULTRA BALL, ESCAPE ROPE, FULL HEAL, ANTIDOTE, PARLYZ HEAL, BURN HEAL, ICE HEAL, AWAKENING, FLUFFY TAIL. Purple panel. |
 
 The HEALING BED, PKMN CENTER PC and STANDARD TV behave exactly as their
 originals do: same scripts, same collision, same animation. The two stores are
@@ -79,7 +79,7 @@ them to you, and gives back any you toss.
   can walk behind, the set, which blocks, and a base you stand on to use them,
   facing up. They may stand in the middle of a room or against the north wall,
   with the top, or the top and the set, over the wall.
-- **LEAGUE STORE** and **VITAMIN STORE** occupy two cells, like a vanilla
+- **BATTLE STORE** and **HUNTING STORE** occupy two cells, like a vanilla
   plant: the lower one blocks and you shop from the cell below it, facing up;
   the upper one you can walk behind. Their top cell may stand over the north
   wall.

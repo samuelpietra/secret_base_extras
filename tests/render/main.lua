@@ -37,8 +37,8 @@ function love.load()
     add(V.Furniture.PC, V.Furniture.PC.art.cellsOn, 5, 0)
     add(V.Furniture.TV, V.Furniture.TV.art.cells, 7, 0)
     add(V.Furniture.TV, V.Furniture.TV.art.cellsOn, 8, 0)
-    add(V.Furniture.LEAGUE_STORE, V.Furniture.LEAGUE_STORE.art.cells, 11, 0)
-    add(V.Furniture.VITAMIN_STORE, V.Furniture.VITAMIN_STORE.art.cells, 12, 0)
+    add(V.Furniture.BATTLE_STORE, V.Furniture.BATTLE_STORE.art.cells, 11, 0)
+    add(V.Furniture.HUNTING_STORE, V.Furniture.HUNTING_STORE.art.cells, 12, 0)
     -- the TV-on animation frames, as the mod reads them
     local blob = slurp(EM .. "data/generated/gba/native/building__generic_building/anim_building_tv_turned_on.idx")
     if blob:byte(1) == 0x78 then blob = love.data.decompress("string", "zlib", blob) end
