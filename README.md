@@ -141,3 +141,4 @@ Keep `manifest.json`'s `version` field in step with the tag.
 | `lib/atlas.lua` | Composes the furniture over the base's own floor into a tileset of the mod's own. |
 | `lib/menu.lua` | The two DECORATE pictures the mod draws: the scrolling category list and the placement preview. |
 | `lib/save_compat.lua` | Writes saves the game understands without the mod, and puts the furniture back on load. |
+| `tests/` | Offline tests, run with `tests/run.sh` (see `tests/README.md`). |
