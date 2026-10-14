@@ -11,7 +11,7 @@
 -- base.decorations / decorationPositions hold them, the cursor moves by their
 -- shape, PACK UP finds and clears them.  This mod adds what a decoration
 -- outside the vanilla table lacks:
---   data       the two decorations and the category, in the engine's table;
+--   data       its decorations and the category, in the engine's table;
 --   menu       the ninth category, in a list that scrolls, and the placement
 --              preview (lib/menu.lua);
 --   placement  where each piece may stand (Decor.canPlace);
