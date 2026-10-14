@@ -9,7 +9,7 @@
 -- Everything else stays the engine's.  The layout numbers follow the engine's
 -- drawCategories and drawPlacing, which cite pokeemerald/src/decoration.c.
 
-return function(V)
+return function(Lib)
   local Menu = {}
 
   local ROW = 16
@@ -28,74 +28,74 @@ return function(V)
 
   -- pokeemerald/src/decoration.c:763
   local function menuColors(Decor, disabled)
-    local pal = Decor.manifest().menuPalette or {}
-    if disabled then return { fg = rgba(pal[5]), shadow = rgba(pal[6]) } end
-    return { fg = rgba(pal[3]), shadow = rgba(pal[4]) }
+    local palette = Decor.manifest().menuPalette or {}
+    if disabled then return { fg = rgba(palette[5]), shadow = rgba(palette[6]) } end
+    return { fg = rgba(palette[3]), shadow = rgba(palette[4]) }
   end
 
   -- pokeemerald/src/decoration.c:731: the bedroom takes only dolls and cushions.
-  local function disabled(D, Decor, cat)
-    return D.isPlayerRoom and D.command == MENU_PLACE and cat ~= Decor.CAT.DOLL and cat ~= Decor.CAT.CUSHION
+  local function disabled(screen, Decor, cat)
+    return screen.isPlayerRoom and screen.command == MENU_PLACE and cat ~= Decor.CAT.DOLL and cat ~= Decor.CAT.CUSHION
   end
 
-  -- The cursor (D.catCursor) is the screen's own and still runs over every
+  -- The cursor (screen.catCursor) is the screen's own and still runs over every
   -- category and CANCEL; only the window onto the list is this mod's.
-  local function scrolled(D, rows)
-    local cursor = D.catCursor or 0
-    local scroll = D.sbxCategoryScroll or 0
+  local function scrolled(screen, rows)
+    local cursor = screen.catCursor or 0
+    local scroll = screen.sbxCategoryScroll or 0
     if cursor < scroll then scroll = cursor end
     if cursor >= scroll + VISIBLE then scroll = cursor - VISIBLE + 1 end
     scroll = math.max(0, math.min(scroll, rows - VISIBLE))
-    D.sbxCategoryScroll = scroll
+    screen.sbxCategoryScroll = scroll
     return scroll
   end
 
-  function Menu.drawCategories(D, E, text)
-    local tpl = D.WIN.categories
-    E.Window.stdFrame(tpl)
-    E.Window.fill(tpl, 1, 1, 1, 1)
+  function Menu.drawCategories(screen, engine, text)
+    local tpl = screen.WIN.categories
+    engine.Window.stdFrame(tpl)
+    engine.Window.fill(tpl, 1, 1, 1, 1)
     local ox, oy = tpl.left * 8, tpl.top * 8
-    local sess = D._session
-    local count = E.Decor.CATEGORY_COUNT
+    local session = screen._session
+    local count = engine.Decor.CATEGORY_COUNT
     local rows = count + 1
-    local scroll = scrolled(D, rows)
+    local scroll = scrolled(screen, rows)
     for r = 0, math.min(rows, VISIBLE) - 1 do
       local cat = scroll + r
       local y = oy + r * ROW + 1
       if cat == count then
-        E.Window.printPx(text(D.command == MENU_TRADE and "gText_Exit" or "gText_Cancel"), ox + 8, y)
+        engine.Window.printPx(text(screen.command == MENU_TRADE and "gText_Exit" or "gText_Cancel"), ox + 8, y)
       else
-        local colors = menuColors(E.Decor, disabled(D, E.Decor, cat))
-        local name = cat == V.Furniture.CATEGORY.index and V.Furniture.CATEGORY.name or text(CATEGORY_TEXT[cat])
-        E.FrlgFont.draw(name, ox + 8, y, { colors = colors })
-        local filled = string.format("%2d/%2d", E.DecorInv.countInCategory(cat, sess), E.DecorInv.SIZES[cat])
-        E.FrlgFont.draw(filled, ox + 104 - E.FrlgFont.measure(filled), y, { colors = colors })
+        local colors = menuColors(engine.Decor, disabled(screen, engine.Decor, cat))
+        local name = cat == Lib.Furniture.CATEGORY.index and Lib.Furniture.CATEGORY.name or text(CATEGORY_TEXT[cat])
+        engine.FrlgFont.draw(name, ox + 8, y, { colors = colors })
+        local filled = string.format("%2d/%2d", engine.DecorInv.countInCategory(cat, session), engine.DecorInv.SIZES[cat])
+        engine.FrlgFont.draw(filled, ox + 104 - engine.FrlgFont.measure(filled), y, { colors = colors })
       end
     end
-    E.Window.cursorPx(ox, oy + 1 + ((D.catCursor or 0) - scroll) * ROW)
+    engine.Window.cursorPx(ox, oy + 1 + ((screen.catCursor or 0) - scroll) * ROW)
     if rows > VISIBLE then
-      E.ListMenu.drawScrollArrows(tpl, scroll > 0, scroll + VISIBLE < rows, D.frames)
+      engine.ListMenu.drawScrollArrows(tpl, scroll > 0, scroll + VISIBLE < rows, screen.frames)
     end
   end
 
-  local function drawObject(E, gid, x, y)
-    local spr = E.OwSprites.getDraw(gid)
-    local q = spr and spr.quads and spr.quads[0]
-    if not q then return end
+  local function drawObject(engine, graphicsId, x, y)
+    local sprite = engine.OwSprites.getDraw(graphicsId)
+    local frameQuad = sprite and sprite.quads and sprite.quads[0]
+    if not frameQuad then return end
     love.graphics.setColor(1, 1, 1, 1)
-    love.graphics.draw(spr.image, q, x, y)
+    love.graphics.draw(sprite.image, frameQuad, x, y)
   end
 
-  local function isFemale(sess)
-    local g = sess and sess.gender
-    return g == 1 or g == "female" or g == "F" or g == "girl"
+  local function isFemale(session)
+    local gender = session and session.gender
+    return gender == 1 or gender == "female" or gender == "F" or gender == "girl"
   end
 
-  local function avatarGfx(D, E)
-    local sess = D._session
-    if D._opts and D._opts.avatarGfx then return D._opts.avatarGfx(sess, isFemale(sess)) end
-    return E.Constants.of("emerald"):require("event_objects",
-      isFemale(sess) and "OBJ_EVENT_GFX_MAY_DECORATING" or "OBJ_EVENT_GFX_BRENDAN_DECORATING")
+  local function avatarGfx(screen, engine)
+    local session = screen._session
+    if screen._opts and screen._opts.avatarGfx then return screen._opts.avatarGfx(session, isFemale(session)) end
+    return engine.Constants.of("emerald"):require("event_objects",
+      isFemale(session) and "OBJ_EVENT_GFX_MAY_DECORATING" or "OBJ_EVENT_GFX_BRENDAN_DECORATING")
   end
 
   local quads = setmetatable({}, { __mode = "k" })
@@ -105,17 +105,17 @@ return function(V)
       byImage = {}
       quads[image] = byImage
     end
-    local q = byImage[slot]
-    if not q then
-      q = love.graphics.newQuad((slot % 16) * 16, math.floor(slot / 16) * 16, 16, 16, image:getDimensions())
-      byImage[slot] = q
+    local frameQuad = byImage[slot]
+    if not frameQuad then
+      frameQuad = love.graphics.newQuad((slot % 16) * 16, math.floor(slot / 16) * 16, 16, 16, image:getDimensions())
+      byImage[slot] = frameQuad
     end
-    return q
+    return frameQuad
   end
 
   -- Where the cursor cell (the footprint's bottom-left) is on screen.  The
   -- camera keeps the player's cell at (112, 72) and pans with the cursor
-  -- (D.mode.panX/panY), so at rest the cursor's offset from where it started,
+  -- (screen.mode.panX/panY), so at rest the cursor's offset from where it started,
   -- less the pan, places it.  The engine's own preview assumes that offset is
   -- zero, which the 1x3 shape breaks: it starts the cursor a row below the
   -- player (pokeemerald/src/decoration.c:1450).
@@ -124,31 +124,31 @@ return function(V)
   -- offset is taken only at rest and held while a step is under way: the
   -- preview and the avatar stay put on screen while the map slides, as the
   -- engine's do.
-  local function cursorScreen(m)
-    if not m.dir or not m.sbxOffset then
-      m.sbxOffset = { 16 * (m.x - m.initialX) - m.panX, 16 * (m.y - m.initialY) - m.panY }
+  local function cursorScreen(mode)
+    if not mode.dir or not mode.sbxOffset then
+      mode.sbxOffset = { 16 * (mode.x - mode.initialX) - mode.panX, 16 * (mode.y - mode.initialY) - mode.panY }
     end
-    return 112 + m.sbxOffset[1], 72 + m.sbxOffset[2]
+    return 112 + mode.sbxOffset[1], 72 + mode.sbxOffset[2]
   end
 
   -- preview: { ts, slots[row][col] } of the art grid, composed without floor.
   -- The decorating avatar stands right of the footprint, on its bottom row.
-  function Menu.drawPlacing(D, E, piece, preview)
-    local m = D.mode
-    local cx, cy = cursorScreen(m)
-    if m.solid or m.blink < 15 then
+  function Menu.drawPlacing(screen, engine, piece, preview)
+    local mode = screen.mode
+    local cursorX, cursorY = cursorScreen(mode)
+    if mode.solid or mode.blink < 15 then
       love.graphics.setColor(1, 1, 1, 1)
       for row, line in ipairs(piece.art.cells) do
         for col in ipairs(line) do
           local slot = preview.slots[row][col]
-          local px = cx + (piece.art.x + col - 1) * 16
-          local py = cy - (piece.height - row) * 16
-          love.graphics.draw(preview.ts.image, quad(preview.ts.image, slot), px, py)
-          love.graphics.draw(preview.ts.overImage, quad(preview.ts.overImage, slot), px, py)
+          local screenX = cursorX + (piece.art.x + col - 1) * 16
+          local screenY = cursorY - (piece.height - row) * 16
+          love.graphics.draw(preview.atlas.image, quad(preview.atlas.image, slot), screenX, screenY)
+          love.graphics.draw(preview.atlas.overImage, quad(preview.atlas.overImage, slot), screenX, screenY)
         end
       end
     end
-    drawObject(E, avatarGfx(D, E), cx + 16 * piece.width, cy - 16)
+    drawObject(engine, avatarGfx(screen, engine), cursorX + 16 * piece.width, cursorY - 16)
   end
 
   return Menu

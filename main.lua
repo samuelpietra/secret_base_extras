@@ -67,49 +67,49 @@ return function(mod)
 
   -- ------- mod-local modules
 
-  local V = { mod = mod }
+  local Lib = { mod = mod }
   local function libChunk(name)
     local rel = "lib/" .. name .. ".lua"
     local source = mod:read(rel)
     if not source then error(("%s: %s is missing"):format(MOD_ID, rel), 0) end
     local chunk, err = load(source, "@" .. mod.path .. "/" .. rel)
     if not chunk then error(("%s: %s did not compile: %s"):format(MOD_ID, rel, tostring(err)), 0) end
-    return chunk()(V)
+    return chunk()(Lib)
   end
-  V.RomTileset = libChunk("rom_tileset")
-  V.Furniture = libChunk("furniture")
-  V.Atlas = libChunk("atlas")
-  V.Menu = libChunk("menu")
-  V.SaveCompat = libChunk("save_compat")
+  Lib.RomTileset = libChunk("rom_tileset")
+  Lib.Furniture = libChunk("furniture")
+  Lib.Atlas = libChunk("atlas")
+  Lib.Menu = libChunk("menu")
+  Lib.SaveCompat = libChunk("save_compat")
 
-  local CATEGORY = V.Furniture.CATEGORY
-  local PIECES = V.Furniture.PIECES
-  local byDecorId = {}
-  for _, piece in ipairs(PIECES) do byDecorId[piece.decorId] = piece end
+  local CATEGORY = Lib.Furniture.CATEGORY
+  local PIECES = Lib.Furniture.PIECES
+  local pieceByDecorId = {}
+  for _, piece in ipairs(PIECES) do pieceByDecorId[piece.decorId] = piece end
 
   -- ------- the vanilla tilesets the furniture is drawn from, read once each
 
-  local roms, romFailed = {}, false
+  local tilesetBySource, tilesetsUnavailable = {}, false
 
-  local function romFor(source)
-    local rom = roms[source.mapDir]
-    if rom then return rom end
+  local function tilesetFor(source)
+    local tileset = tilesetBySource[source.mapDir]
+    if tileset then return tileset end
     local Dataset = engineModule(ENGINE.dataset)
     local cache = Dataset and Dataset.cache and Dataset.cache()
     local why = "no dataset cache"
-    if cache then rom, why = V.RomTileset.forMap(cache, source.mapDir, source.pretName) end
-    if not rom then error(why, 0) end
-    roms[source.mapDir] = rom
-    return rom
+    if cache then tileset, why = Lib.RomTileset.forMap(cache, source.mapDir, source.pretName) end
+    if not tileset then error(why, 0) end
+    tilesetBySource[source.mapDir] = tileset
+    return tileset
   end
 
   -- Every piece's tileset, or false (logged once) when the cache lacks one.
-  local function furnitureTilesets()
-    if romFailed then return false end
+  local function loadFurnitureTilesets()
+    if tilesetsUnavailable then return false end
     for _, piece in ipairs(PIECES) do
-      local loaded, why = pcall(romFor, piece.source)
+      local loaded, why = pcall(tilesetFor, piece.source)
       if not loaded then
-        romFailed = true
+        tilesetsUnavailable = true
         log("furniture disabled: %s", tostring(why))
         return false
       end
@@ -142,11 +142,11 @@ return function(mod)
 
   -- The player owns one of each, always: a piece that was tossed comes back
   -- on the next load.
-  local function ensureOwned(sess)
+  local function ensureOwned(session)
     local DecorInv = engineModule(ENGINE.decorInv)
-    if not (sess and DecorInv) then return end
+    if not (session and DecorInv) then return end
     for _, piece in ipairs(PIECES) do
-      if not DecorInv.has(piece.decorId, sess) then DecorInv.add(piece.decorId, sess) end
+      if not DecorInv.has(piece.decorId, session) then DecorInv.add(piece.decorId, session) end
     end
   end
 
@@ -154,27 +154,27 @@ return function(mod)
 
   -- state.footprint[y * ROW + x] = { piece, row, col, x, y, floorMid, blocked }
   --   the cells pieces occupy: collision, the A button, overlap checks
-  -- state.art[y * ROW + x] = { x, y, layers = { { owner, piece, row, col }, ... } }
+  -- state.art[y * ROW + x] = { x, y, layers = { { placement, piece, row, col }, ... } }
   --   every art cell drawn there, footprint or overhang, in placement order
-  -- state.placed[piece.id .. ":" .. left .. ":" .. top] = owner
+  -- state.placements[piece.id .. ":" .. left .. ":" .. top] = placement
   --   one token per placed piece, which its art entries carry
   local state = { active = false }
-  local drawing = false
-  -- lit[piece.id]: the piece shows its cellsOn art (a PC in use, a TV with a
-  -- show on air).  ticks counts field draws, the clock of onAnim.
-  local lit = {}
-  local ticks = 0
+  local drawingField = false
+  -- switchedOn[piece.id]: the piece shows its cellsOn art (a PC in use, a TV with a
+  -- show on air).  fieldDrawCount counts field draws, the clock of onAnim.
+  local switchedOn = {}
+  local fieldDrawCount = 0
 
   local function currentSession()
     local Runtime = engineModule(ENGINE.runtime)
     return Runtime and Runtime.getSession and Runtime.getSession() or nil
   end
 
-  local function inOwnBase(sess)
+  local function inOwnBase(session)
     local SB, Rse = engineModule(ENGINE.secretBase), engineModule(ENGINE.rse)
-    if not (sess and SB and Rse) then return false end
-    local called, inBase = pcall(SB.curMapIsSecretBase, sess)
-    return called and inBase and Rse.var("VAR_CURRENT_SECRET_BASE", sess) == OWN_BASE
+    if not (session and SB and Rse) then return false end
+    local called, inBase = pcall(SB.curMapIsSecretBase, session)
+    return called and inBase and Rse.var("VAR_CURRENT_SECRET_BASE", session) == OWN_BASE
   end
 
   local function invalidate(x, y)
@@ -201,34 +201,34 @@ return function(mod)
     end
   end
 
-  local function placedKey(piece, left, top)
+  local function placementKey(piece, left, top)
     return piece.id .. ":" .. left .. ":" .. top
   end
 
   local function addPiece(layout, piece, left, top)
     local Field = engineModule(ENGINE.field)
-    local owner = {}
-    state.placed[placedKey(piece, left, top)] = owner
+    local placement = {}
+    state.placements[placementKey(piece, left, top)] = placement
     eachCell(piece, left, top, function(x, y, row, col)
-      local c = { piece = piece, row = row, col = col, x = x, y = y,
+      local cell = { piece = piece, row = row, col = col, x = x, y = y,
         floorMid = layout:midAt(x, y), blocked = piece.blocked[row + 1][col + 1] }
-      state.footprint[y * ROW + x] = c
-      if c.blocked and Field then Field.setMetatile(x, y, c.floorMid, true) end
+      state.footprint[y * ROW + x] = cell
+      if cell.blocked and Field then Field.setMetatile(x, y, cell.floorMid, true) end
     end)
     eachArtCell(piece, left, top, function(x, y, row, col)
       local key = y * ROW + x
       state.art[key] = state.art[key] or { x = x, y = y, layers = {} }
-      table.insert(state.art[key].layers, { owner = owner, piece = piece, row = row, col = col })
+      table.insert(state.art[key].layers, { placement = placement, piece = piece, row = row, col = col })
       invalidate(x, y)
     end)
-    state.ts = nil
+    state.atlas = nil
   end
 
   -- PACK UP finds pieces by footprint; the art they left in other cells goes
   -- with them.
   local function removePiece(piece, left, top)
-    local owner = state.placed[placedKey(piece, left, top)]
-    state.placed[placedKey(piece, left, top)] = nil
+    local placement = state.placements[placementKey(piece, left, top)]
+    state.placements[placementKey(piece, left, top)] = nil
     eachCell(piece, left, top, function(x, y)
       state.footprint[y * ROW + x] = nil
     end)
@@ -237,12 +237,12 @@ return function(mod)
       local cell = state.art[key]
       local list = cell and cell.layers or {}
       for i = #list, 1, -1 do
-        if list[i].owner == owner then table.remove(list, i) end
+        if list[i].placement == placement then table.remove(list, i) end
       end
       if cell and #list == 0 then state.art[key] = nil end
       invalidate(x, y)
     end)
-    state.ts = nil
+    state.atlas = nil
   end
 
   -- ------- the save (lib/save_compat.lua)
@@ -251,25 +251,25 @@ return function(mod)
     local Decor, SB = engineModule(ENGINE.decoration), engineModule(ENGINE.secretBase)
     return {
       modId = MOD_ID, extraCategory = CATEGORY.index, maxDecorations = Decor.MAX_SECRET_BASE,
-      pieceByDecorId = byDecorId, log = log,
+      pieceByDecorId = pieceByDecorId, log = log,
       ownBase = function(session) return SB.base(session, OWN_BASE) end,
       decodePosition = Decor.decodePos, decorationSize = Decor.dims,
     }
   end
 
   local function restorePlaced(session)
-    V.SaveCompat.restorePlaced(session, saveContext())
+    Lib.SaveCompat.restorePlaced(session, saveContext())
   end
 
   -- Runs after the engine has laid the base's own decorations out.  The
   -- collision overrides are cleared by every map load, which is why this runs
   -- on every load and not once.
   local function onBaseLoaded()
-    lit = {}
-    local sess = currentSession()
-    restorePlaced(sess)
-    ensureOwned(sess)
-    if not inOwnBase(sess) or not furnitureTilesets() then
+    switchedOn = {}
+    local session = currentSession()
+    restorePlaced(session)
+    ensureOwned(session)
+    if not inOwnBase(session) or not loadFurnitureTilesets() then
       state = { active = false }
       return
     end
@@ -281,11 +281,11 @@ return function(mod)
       state = { active = false }
       return
     end
-    state = { active = true, mapId = sess.map, def = def, layout = layout, pair = def.pair or layout.pair,
-      footprint = {}, art = {}, placed = {} }
-    local base = SB.base(sess, OWN_BASE)
+    state = { active = true, mapId = session.map, def = def, layout = layout, pair = def.pair or layout.pair,
+      footprint = {}, art = {}, placements = {} }
+    local base = SB.base(session, OWN_BASE)
     for i = 1, Decor.MAX_SECRET_BASE do
-      local piece = byDecorId[tonumber(base.decorations[i])]
+      local piece = pieceByDecorId[tonumber(base.decorations[i])]
       if piece then
         local x, y = Decor.decodePos(base.decorationPositions[i])
         addPiece(layout, piece, x, y - piece.height + 1)
@@ -308,10 +308,10 @@ return function(mod)
   -- the layout's own.  PACK UP leaves an override behind too, but one that
   -- restores the original metatile, and that cell is free again.
   local function decorated(layout, x, y)
-    local ov = layout.overrides[y * ROW + x]
-    if not ov then return false end
+    local override = layout.overrides[y * ROW + x]
+    if not override then return false end
     local cell = layout.cells[y * layout.width + x + 1]
-    return not cell or ov.mid ~= cell.mid
+    return not cell or override.mid ~= cell.mid
   end
 
   -- Every footprint cell on plain floor (NORMAL behaviour, walkable, no
@@ -368,12 +368,12 @@ return function(mod)
   -- frame, 256 bytes of palette slot (the tileset's own encoding, 0 meaning
   -- transparent) for each mid its manifest lists, so the cell's frames are
   -- found by the position of its mid in that list.
-  local anims = {}
-  local function animFor(piece)
+  local animations = {}
+  local function animationFor(piece)
     local anim = piece.art.onAnim
     if not anim then return nil end
-    if anims[piece] ~= nil then return anims[piece] or nil end
-    anims[piece] = false
+    if animations[piece] ~= nil then return animations[piece] or nil end
+    animations[piece] = false
     local Dataset = engineModule(ENGINE.dataset)
     local cache = Dataset and Dataset.cache and Dataset.cache()
     local root = "data/generated/gba/native/" .. anim.pair .. "/"
@@ -382,41 +382,41 @@ return function(mod)
     local readOk, manifest = false, nil
     if chunk then readOk, manifest = pcall(chunk) end
     local bank
-    for _, row in ipairs(readOk and type(manifest) == "table" and manifest.banks or {}) do
-      if row.file == anim.file then bank = row break end
+    for _, bankRow in ipairs(readOk and type(manifest) == "table" and manifest.banks or {}) do
+      if bankRow.file == anim.file then bank = bankRow break end
     end
     local mid = artMid(piece, anim.row, anim.col, true)
-    local k
+    local midIndex
     for i, m in ipairs(bank and bank.mids or {}) do
-      if m == mid then k = i break end
+      if m == mid then midIndex = i break end
     end
-    local blob = k and cache:read(root .. anim.file)
+    local blob = midIndex and cache:read(root .. anim.file)
     if type(blob) == "string" and blob:byte(1) == 0x78 then
       local inflated, raw = pcall(love.data.decompress, "string", "zlib", blob)
       blob = inflated and raw or nil
     end
-    local count, stride = bank and tonumber(bank.frames) or 0, bank and #bank.mids or 0
-    if type(blob) ~= "string" or count < 1 or #blob < count * stride * 256 then
+    local count, midsPerFrame = bank and tonumber(bank.frames) or 0, bank and #bank.mids or 0
+    if type(blob) ~= "string" or count < 1 or #blob < count * midsPerFrame * 256 then
       log("%s: no %s animation, its screen will not blink", piece.id, anim.file)
       return nil
     end
     local frames = {}
-    for f = 0, count - 1 do
-      local base = (f * stride + k - 1) * 256
-      local px = {}
+    for frame = 0, count - 1 do
+      local base = (frame * midsPerFrame + midIndex - 1) * 256
+      local pixels = {}
       for i = 1, 256 do
-        local v = blob:byte(base + i)
-        px[i] = v % 16 == 0 and 0 or v
+        local value = blob:byte(base + i)
+        pixels[i] = value % 16 == 0 and 0 or value
       end
-      frames[f] = px
+      frames[frame] = pixels
     end
-    anims[piece] = { frames = frames, count = count, period = tonumber(bank.period) or 1 }
-    return anims[piece]
+    animations[piece] = { frames = frames, count = count, period = tonumber(bank.period) or 1 }
+    return animations[piece]
   end
 
-  local function animFrame(piece)
-    local a = animFor(piece)
-    return a and math.floor(ticks / a.period) % a.count or 0
+  local function animationFrame(piece)
+    local animation = animationFor(piece)
+    return animation and math.floor(fieldDrawCount / animation.period) % animation.count or 0
   end
 
   -- A cell's picture is what the base shows there now (layout:midAt, which
@@ -425,26 +425,26 @@ return function(mod)
   -- decoration placed under a piece's overhang, or a piece switching on, is
   -- a new key and recomposes on its own.
   local function cellPicture(x, y, frameOf)
-    local mid = state.layout:midAt(x, y)
-    local parts, layers = { tostring(mid) }, {}
+    local baseMid = state.layout:midAt(x, y)
+    local parts, layers = { tostring(baseMid) }, {}
     local cell = state.art[y * ROW + x]
-    for _, a in ipairs(cell and cell.layers or {}) do
-      local on = lit[a.piece.id] == true
-      local m = artMid(a.piece, a.row, a.col, on)
-      local anim = on and a.piece.art.onAnim
+    for _, layer in ipairs(cell and cell.layers or {}) do
+      local on = switchedOn[layer.piece.id] == true
+      local layerMid = artMid(layer.piece, layer.row, layer.col, on)
+      local onAnim = on and layer.piece.art.onAnim
       local pixels
-      local part = a.piece.id .. ":" .. a.row .. ":" .. a.col .. ":" .. m
-      if anim and a.row == anim.row and a.col == anim.col then
-        local loaded = animFor(a.piece)
-        local f = frameOf(a.piece)
-        pixels = loaded and loaded.frames[f]
-        if pixels then part = part .. ":" .. f end
+      local part = layer.piece.id .. ":" .. layer.row .. ":" .. layer.col .. ":" .. layerMid
+      if onAnim and layer.row == onAnim.row and layer.col == onAnim.col then
+        local animation = animationFor(layer.piece)
+        local frame = frameOf(layer.piece)
+        pixels = animation and animation.frames[frame]
+        if pixels then part = part .. ":" .. frame end
       end
       parts[#parts + 1] = part
-      layers[#layers + 1] = { piece = a.piece, rom = romFor(a.piece.source), row = a.row, col = a.col, mid = m,
+      layers[#layers + 1] = { piece = layer.piece, tileset = tilesetFor(layer.piece.source), row = layer.row, col = layer.col, mid = layerMid,
         pixels = pixels }
     end
-    return table.concat(parts, ","), mid, layers
+    return table.concat(parts, ","), baseMid, layers
   end
 
   -- Composes every picture the base needs now, every animation frame of the
@@ -452,62 +452,62 @@ return function(mod)
   -- recomposes (redirect finds its key missing).
   local function rebuildAtlas()
     local NativeTileset = engineModule(ENGINE.nativeTileset)
-    local floorTs = NativeTileset and NativeTileset._pairs[state.pair]
-    if not (floorTs and floorTs.imageData) then return false end
+    local floorAtlas = NativeTileset and NativeTileset._pairs[state.pair]
+    if not (floorAtlas and floorAtlas.imageData) then return false end
     local list, index = {}, {}
     local frameCount = 1
     for _, piece in ipairs(PIECES) do
-      local a = lit[piece.id] and animFor(piece)
-      if a then frameCount = math.max(frameCount, a.count) end
+      local animation = switchedOn[piece.id] and animationFor(piece)
+      if animation then frameCount = math.max(frameCount, animation.count) end
     end
     for _, cell in pairs(state.art) do
-      for f = 0, frameCount - 1 do
-        local id, mid, layers = cellPicture(cell.x, cell.y, function(piece)
-          local a = animFor(piece)
-          return a and f % a.count or 0
+      for frame = 0, frameCount - 1 do
+        local id, baseMid, layers = cellPicture(cell.x, cell.y, function(piece)
+          local animation = animationFor(piece)
+          return animation and frame % animation.count or 0
         end)
         if not index[id] then
-          list[#list + 1] = { floorMid = mid, layers = layers }
+          list[#list + 1] = { floorMid = baseMid, layers = layers }
           index[id] = #list
         end
       end
     end
-    local built, ts, mids = pcall(V.Atlas.build, VIRTUAL_PAIR, floorTs, NativeTileset, list)
+    local built, atlas, mids = pcall(Lib.Atlas.build, VIRTUAL_PAIR, floorAtlas, NativeTileset, list)
     if not built then
-      log("could not compose the furniture: %s", tostring(ts))
+      log("could not compose the furniture: %s", tostring(atlas))
       state.active = false
       return false
     end
     for id, i in pairs(index) do index[id] = mids[i] end
-    state.ts, state.slotByKey = ts, index
-    NativeTileset._pairs[VIRTUAL_PAIR] = ts
+    state.atlas, state.slotByPicture = atlas, index
+    NativeTileset._pairs[VIRTUAL_PAIR] = atlas
     return true
   end
 
   local function atlasLive()
     local NativeTileset = engineModule(ENGINE.nativeTileset)
-    return state.ts and state.ts.image and NativeTileset and NativeTileset._pairs[VIRTUAL_PAIR] == state.ts
+    return state.atlas and state.atlas.image and NativeTileset and NativeTileset._pairs[VIRTUAL_PAIR] == state.atlas
   end
 
   -- The cell's mid in this mod's pair, or nil to let the engine draw it.
-  local function redirect(wx, wy)
-    if not (drawing and state.active and state.art[wy * ROW + wx]) then return nil end
+  local function redirect(x, y)
+    if not (drawingField and state.active and state.art[y * ROW + x]) then return nil end
     local Map = engineModule(ENGINE.map)
     if not (Map and Map.current == state.mapId) then return nil end
-    local id = cellPicture(wx, wy, animFrame)
-    local slot = atlasLive() and state.slotByKey[id]
+    local picture = cellPicture(x, y, animationFrame)
+    local slot = atlasLive() and state.slotByPicture[picture]
     if slot then return slot end
     if not rebuildAtlas() then return nil end
-    return state.slotByKey[id]
+    return state.slotByPicture[picture]
   end
 
   -- Switching a piece on or off redraws its art cells.
-  local function setLit(piece, on)
-    if (lit[piece.id] == true) == (on == true) then return end
-    lit[piece.id] = on == true
+  local function setSwitchedOn(piece, on)
+    if (switchedOn[piece.id] == true) == (on == true) then return end
+    switchedOn[piece.id] = on == true
     for _, cell in pairs(state.art or {}) do
-      for _, a in ipairs(cell.layers) do
-        if a.piece == piece then invalidate(cell.x, cell.y) break end
+      for _, layer in ipairs(cell.layers) do
+        if layer.piece == piece then invalidate(cell.x, cell.y) break end
       end
     end
   end
@@ -515,14 +515,14 @@ return function(mod)
   -- Each field draw advances the animation clock; when an animated piece
   -- that is on reaches a new frame, its animated cell is redrawn.
   local function tick()
-    ticks = ticks + 1
+    fieldDrawCount = fieldDrawCount + 1
     if not state.active then return end
-    for _, c in pairs(state.footprint) do
-      local anim = c.piece.art.onAnim
+    for _, cell in pairs(state.footprint) do
+      local onAnim = cell.piece.art.onAnim
       -- once per piece: from its footprint's top-left cell to the art cell
-      if anim and c.row == 0 and c.col == 0 and lit[c.piece.id] then
-        local a = animFor(c.piece)
-        if a and ticks % a.period == 0 then invalidate(c.x + c.piece.art.x + anim.col, c.y + anim.row) end
+      if onAnim and cell.row == 0 and cell.col == 0 and switchedOn[cell.piece.id] then
+        local animation = animationFor(cell.piece)
+        if animation and fieldDrawCount % animation.period == 0 then invalidate(cell.x + cell.piece.art.x + onAnim.col, cell.y + onAnim.row) end
       end
     end
   end
@@ -533,19 +533,19 @@ return function(mod)
   local function previewFor(piece)
     if previews[piece] then return previews[piece] end
     local NativeTileset = engineModule(ENGINE.nativeTileset)
-    local list, at = {}, {}
+    local list, artCells = {}, {}
     eachArtCell(piece, 0, 0, function(_, _, row, col)
-      list[#list + 1] = { layers = { { piece = piece, rom = romFor(piece.source), row = row, col = col,
+      list[#list + 1] = { layers = { { piece = piece, tileset = tilesetFor(piece.source), row = row, col = col,
         mid = artMid(piece, row, col, false) } } }
-      at[#list] = { row = row, col = col }
+      artCells[#list] = { row = row, col = col }
     end)
-    local ts, mids = V.Atlas.build(VIRTUAL_PAIR .. "_preview", false, NativeTileset, list)
+    local atlas, mids = Lib.Atlas.build(VIRTUAL_PAIR .. "_preview", false, NativeTileset, list)
     local slots = {}
-    for i, p in ipairs(at) do
-      slots[p.row + 1] = slots[p.row + 1] or {}
-      slots[p.row + 1][p.col + 1] = mids[i]
+    for i, artCell in ipairs(artCells) do
+      slots[artCell.row + 1] = slots[artCell.row + 1] or {}
+      slots[artCell.row + 1][artCell.col + 1] = mids[i]
     end
-    previews[piece] = { ts = ts, slots = slots }
+    previews[piece] = { atlas = atlas, slots = slots }
     return previews[piece]
   end
 
@@ -575,32 +575,32 @@ return function(mod)
   -- This one draws the two pictures it owns and hands everything else back,
   -- by drawing once more with opts.draw cleared.
   local function screenDraw(previous)
-    local function engineDraw(D, helpers)
-      if previous then return previous(D, helpers) end
-      local opts = D._opts
+    local function engineDraw(screen, helpers)
+      if previous then return previous(screen, helpers) end
+      local opts = screen._opts
       local mine = opts.draw
       opts.draw = nil
-      local drawn, err = pcall(D.draw)
+      local drawn, err = pcall(screen.draw)
       opts.draw = mine
       if not drawn then error(err, 0) end
     end
-    return function(D, helpers)
+    return function(screen, helpers)
       local Decor = engineModule(ENGINE.decoration)
-      if D.mode and D.mode.kind == "place" and byDecorId[D.mode.decor] then
-        local piece = byDecorId[D.mode.decor]
-        V.Menu.drawPlacing(D, screenModules(), piece, previewFor(piece))
+      if screen.mode and screen.mode.kind == "place" and pieceByDecorId[screen.mode.decor] then
+        local piece = pieceByDecorId[screen.mode.decor]
+        Lib.Menu.drawPlacing(screen, screenModules(), piece, previewFor(piece))
         -- The message and the yes/no still come from the engine.
-        local mode = D.mode
-        D.mode = nil
-        local drawn, err = pcall(engineDraw, D, helpers)
-        D.mode = mode
+        local mode = screen.mode
+        screen.mode = nil
+        local drawn, err = pcall(engineDraw, screen, helpers)
+        screen.mode = mode
         if not drawn then error(err, 0) end
         return
       end
-      if not D.mode and D.view == "categories" and Decor.CATEGORY_COUNT > CATEGORY.index then
-        return V.Menu.drawCategories(D, screenModules(), D._opts.text)
+      if not screen.mode and screen.view == "categories" and Decor.CATEGORY_COUNT > CATEGORY.index then
+        return Lib.Menu.drawCategories(screen, screenModules(), screen._opts.text)
       end
-      return engineDraw(D, helpers)
+      return engineDraw(screen, helpers)
     end
   end
 
@@ -632,7 +632,7 @@ return function(mod)
     local Plan = engineModule(ENGINE.fieldPlan)
     local NativeTileset = engineModule(ENGINE.nativeTileset)
     local SB = engineModule(ENGINE.secretBase)
-    local PcRse = engineModule(ENGINE.pcNatives)
+    local PcNatives = engineModule(ENGINE.pcNatives)
     local Player = engineModule(ENGINE.player)
     if not (Decor and DecorInv) then return false end
 
@@ -649,13 +649,13 @@ return function(mod)
     -- alongside, so every inventory function that takes a category works on it.
     ok = wrap(DecorInv, "inventories", function(original)
       return function(...)
-        local inv = original(...)
-        if type(inv) == "table" then
-          local list = type(inv[CATEGORY.index]) == "table" and inv[CATEGORY.index] or {}
+        local inventories = original(...)
+        if type(inventories) == "table" then
+          local list = type(inventories[CATEGORY.index]) == "table" and inventories[CATEGORY.index] or {}
           for i = 1, CATEGORY.size do list[i] = tonumber(list[i]) or DecorInv.DECOR_NONE end
-          inv[CATEGORY.index] = list
+          inventories[CATEGORY.index] = list
         end
-        return inv
+        return inventories
       end
     end) and ok
 
@@ -665,10 +665,10 @@ return function(mod)
     -- furniture is never traded away.  Its "no decorations" check counts with
     -- DecorInv.count, which then has to include EXTRA.
     ok = wrap(DecorInv, "count", function(original)
-      return function(sess, ...)
-        local n = original(sess, ...)
-        if Decor.CATEGORY_COUNT > CATEGORY.index then n = n + DecorInv.countInCategory(CATEGORY.index, sess) end
-        return n
+      return function(session, ...)
+        local total = original(session, ...)
+        if Decor.CATEGORY_COUNT > CATEGORY.index then total = total + DecorInv.countInCategory(CATEGORY.index, session) end
+        return total
       end
     end) and ok
 
@@ -696,18 +696,18 @@ return function(mod)
 
     ok = wrap(Decor, "canPlace", function(original)
       return function(grid, place, decor, ...)
-        local piece = byDecorId[tonumber(decor)]
+        local piece = pieceByDecorId[tonumber(decor)]
         if piece then return canPlacePiece(grid, place, piece) end
         -- A vanilla decoration may not land on this mod's furniture either.
-        local w, h = Decor.dims(decor)
-        if state.active and footprintOverlap(place.x, place.y - h + 1, w, h) then return false end
+        local width, height = Decor.dims(decor)
+        if state.active and footprintOverlap(place.x, place.y - height + 1, width, height) then return false end
         return original(grid, place, decor, ...)
       end
     end) and ok
 
     ok = wrap(Decor, "showOnMap", function(original)
       return function(grid, mapX, mapY, decor, ...)
-        local piece = byDecorId[tonumber(decor)]
+        local piece = pieceByDecorId[tonumber(decor)]
         if not piece then return original(grid, mapX, mapY, decor, ...) end
         if not (state.active and state.layout) then return false end
         addPiece(state.layout, piece, mapX, mapY - piece.height + 1)
@@ -719,15 +719,15 @@ return function(mod)
     -- drops the pieces from the drawing first, while the record still says
     -- where they were.
     ok = wrap(Decor, "clearNonSprites", function(original)
-      return function(grid, ctx, marked, ...)
-        for _, m in ipairs(marked or {}) do
-          local piece = byDecorId[tonumber(ctx.items[m.idx])]
+      return function(grid, context, marked, ...)
+        for _, mark in ipairs(marked or {}) do
+          local piece = pieceByDecorId[tonumber(context.items[mark.idx])]
           if piece and state.active then
-            local x, y = Decor.decodePos(ctx.pos[m.idx])
+            local x, y = Decor.decodePos(context.pos[mark.idx])
             removePiece(piece, x, y - piece.height + 1)
           end
         end
-        return original(grid, ctx, marked, ...)
+        return original(grid, context, marked, ...)
       end
     end) and ok
 
@@ -736,25 +736,25 @@ return function(mod)
     -- Map.worldMidAt also answers Collision.worldBehavior, so the redirect is
     -- only on while the field itself is being drawn.
     local function drawn(succeeded, ...)
-      drawing = false
+      drawingField = false
       if not succeeded then error((...), 0) end
       return ...
     end
     ok = wrap(FieldView, "draw", function(original)
       return function(...)
-        drawing = true
+        drawingField = true
         tick()
         return drawn(pcall(original, ...))
       end
     end) and ok
 
     ok = wrap(Map, "worldMidAt", function(original)
-      return function(cx, cy, primaryDef)
+      return function(x, y, primaryDef)
         if primaryDef == state.def then
-          local mid = redirect(cx, cy)
+          local mid = redirect(x, y)
           if mid then return mid, VIRTUAL_PAIR end
         end
-        return original(cx, cy, primaryDef)
+        return original(x, y, primaryDef)
       end
     end) and ok
 
@@ -798,10 +798,10 @@ return function(mod)
     -- and TVs are (their behaviours' "facing up" rule).
     ok = wrap(SB, "interactBg", function(original)
       return function(x, y, facing, elevation)
-        local c = state.active and state.footprint[y * ROW + x]
-        if c and inOwnBase(currentSession()) then
-          local piece = c.piece
-          if not piece.fromBelow or (c.row == piece.screenRow and (facing == "up" or facing == 2)) then
+        local cell = state.active and state.footprint[y * ROW + x]
+        if cell and inOwnBase(currentSession()) then
+          local piece = cell.piece
+          if not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) then
             return SB.startScript(piece.script)
           end
           return false
@@ -812,15 +812,15 @@ return function(mod)
 
     -- DoPCTurnOnEffect / DoPCTurnOffEffect write the Pokemon Center screen
     -- into the tile above the player.  On our PC, light its own screen.
-    ok = wrap(PcRse, "setPcMetatile", function(original)
-      return function(ctx, on)
-        local c = state.active and Player and Player.facing == "up"
+    ok = wrap(PcNatives, "setPcMetatile", function(original)
+      return function(scriptContext, on)
+        local cell = state.active and Player and Player.facing == "up"
           and state.footprint[((tonumber(Player.cellY) or 0) - 1) * ROW + (tonumber(Player.cellX) or 0)]
-        if c and c.piece == V.Furniture.PC then
-          setLit(c.piece, on)
+        if cell and cell.piece == Lib.Furniture.PC then
+          setSwitchedOn(cell.piece, on)
           return nil
         end
-        return original(ctx, on)
+        return original(scriptContext, on)
       end
     end) and ok
 
@@ -832,8 +832,8 @@ return function(mod)
       return function(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         local count = original(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         if state.active and layout == state.layout then
-          local TV = V.Furniture.TV
-          setLit(TV, metatile == artMid(TV, TV.screenRow, 0, true))
+          local TV = Lib.Furniture.TV
+          setSwitchedOn(TV, metatile == artMid(TV, TV.screenRow, 0, true))
         end
         return count
       end
@@ -847,7 +847,7 @@ return function(mod)
   end
 
   mod.events:on("save.writing", function(payload)
-    local cleaned, err = pcall(function() V.SaveCompat.writeClean(payload.save, saveContext()) end)
+    local cleaned, err = pcall(function() Lib.SaveCompat.writeClean(payload.save, saveContext()) end)
     if not cleaned then log("save written with the mod's furniture in it: %s", tostring(err)) end
   end)
   mod.events:on("save.loaded", function(payload)

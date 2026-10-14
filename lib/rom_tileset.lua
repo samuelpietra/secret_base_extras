@@ -60,13 +60,13 @@ return function()
     return setmetatable({ primary = primary, secondary = secondary }, Pair)
   end
 
-  local function half(self, mid)
+  local function tilesetHoldingMid(self, mid)
     if mid < NUM_METATILES_IN_PRIMARY then return self.primary, mid end
     return self.secondary, mid - NUM_METATILES_IN_PRIMARY
   end
 
   function Pair:layerType(mid)
-    local files, i = half(self, mid)
+    local files, i = tilesetHoldingMid(self, mid)
     return math.floor(u16(files["attributes.bin"], i * 2 + 1) / LAYER_SHIFT) % 16
   end
 
@@ -75,27 +75,27 @@ return function()
     local tile = ref % 1024
     local hflip = math.floor(ref / 1024) % 2 == 1
     local vflip = math.floor(ref / 2048) % 2 == 1
-    local pal = math.floor(ref / 4096)
+    local palette = math.floor(ref / 4096)
     if hflip then x = 7 - x end
     if vflip then y = 7 - y end
     local tiles, base = self.primary["tiles.4bpp"], tile
     if tile >= NUM_TILES_IN_PRIMARY then
       tiles, base = self.secondary["tiles.4bpp"], tile - NUM_TILES_IN_PRIMARY
     end
-    local b = tiles:byte(base * 32 + y * 4 + math.floor(x / 2) + 1) or 0
-    local c = (x % 2 == 1) and math.floor(b / 16) or b % 16
-    if c == 0 then return 0 end
-    return pal * 16 + c
+    local byte = tiles:byte(base * 32 + y * 4 + math.floor(x / 2) + 1) or 0
+    local color = (x % 2 == 1) and math.floor(byte / 16) or byte % 16
+    if color == 0 then return 0 end
+    return palette * 16 + color
   end
 
   -- One 16x16 layer (0 = bottom, 1 = top) as 256 palette slots, 0 meaning
   -- transparent, row-major.
   function Pair:layer(mid, which)
-    local files, i = half(self, mid)
-    local mt = files["metatiles.bin"]
+    local files, i = tilesetHoldingMid(self, mid)
+    local metatiles = files["metatiles.bin"]
     local out = {}
     for k = 0, 3 do
-      local ref = u16(mt, i * 16 + (which * 4 + k) * 2 + 1)
+      local ref = u16(metatiles, i * 16 + (which * 4 + k) * 2 + 1)
       local ox, oy = (k % 2) * 8, math.floor(k / 2) * 8
       for y = 0, 7 do
         for x = 0, 7 do
@@ -111,11 +111,11 @@ return function()
   -- bgr555_to_rgb8 (src/import/gba/native_pack.lua) so a piece of furniture
   -- is the exact colour it is in its vanilla map.
   function Pair:color(slot)
-    local pal = math.floor(slot / 16)
-    local files = pal < NUM_PALS_IN_PRIMARY and self.primary or self.secondary
-    local c = u16(files["palettes.bin"], slot * 2 + 1)
+    local palette = math.floor(slot / 16)
+    local files = palette < NUM_PALS_IN_PRIMARY and self.primary or self.secondary
+    local color = u16(files["palettes.bin"], slot * 2 + 1)
     local function channel(v) return math.floor(v * 255 / 31 + 0.5) / 255 end
-    return channel(c % 32), channel(math.floor(c / 32) % 32), channel(math.floor(c / 1024) % 32)
+    return channel(color % 32), channel(math.floor(color / 32) % 32), channel(math.floor(color / 1024) % 32)
   end
 
   return RomTileset
