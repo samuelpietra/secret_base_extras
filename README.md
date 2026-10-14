@@ -19,7 +19,7 @@ DECORATE and PACK UP commands, and saved with your base.
 | | |
 |---|---|
 | Game | Pokémon Emerald |
-| Engine | gen1recomp 0.3.0 or newer (built against 0.3.85) |
+| Engine | gen1recomp 0.3.85 or newer (the version it was validated on) |
 | Mod API | 2 |
 | Permissions | `engine_internals` |
 
