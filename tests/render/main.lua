@@ -29,10 +29,10 @@ function love.load()
       local rom = romOf(piece.source)
       for row, line in ipairs(grid) do for col, mid in ipairs(line) do
         list[#list + 1] = { floorMid = 0, layers = { { piece = piece, tileset = rom, row = row - 1, col = col - 1, mid = mid } } }
-        place[#place + 1] = { ox + piece.art.x + col - 1, oy + row - 1 }
+        place[#place + 1] = { ox + piece.art.x + col - 1, oy + (piece.art.y or 0) + row - 1 }
       end end
     end
-    add(V.Furniture.BED, V.Furniture.BED.art.cells, 1, 0)
+    add(V.Furniture.BED, V.Furniture.BED.art.cells, 1, 1)
     add(V.Furniture.PC, V.Furniture.PC.art.cells, 3, 0)
     add(V.Furniture.PC, V.Furniture.PC.art.cellsOn, 5, 0)
     add(V.Furniture.TV, V.Furniture.TV.art.cells, 7, 0)
@@ -47,8 +47,8 @@ function love.load()
       place[#place + 1] = { 9 + f, 1 }
     end
     local ts, mids = V.Atlas.build("t", floorTs, NT, list)
-    local out = love.image.newImageData(11 * 16, 3 * 16)
-    for y = 0, 47 do for x = 0, 175 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
+    local out = love.image.newImageData(11 * 16, 4 * 16)
+    for y = 0, 63 do for x = 0, 175 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
     for i, p in ipairs(place) do
       local s = mids[i]
       for _, img in ipairs({ ts.imageData, ts.overImageData }) do

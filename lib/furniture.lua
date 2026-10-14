@@ -15,8 +15,8 @@
 --              (`blocked`), answer the A button, and no other decoration may
 --              share them.  Like every decoration, a placed piece is recorded
 --              by its footprint's bottom-left cell.
---   art        the vanilla metatiles drawn for it, `x` columns left of the
---              footprint.  Art cells outside the footprint are drawn over
+--   art        the vanilla metatiles drawn for it, `x` columns left of and
+--              `y` rows above the footprint (0 when absent).  Art cells outside the footprint are drawn over
 --              whatever stands there (floor, wall, another decoration) and
 --              occupy nothing, so a piece can stand against a wall while its
 --              edge pixels still reach into the neighbouring cell.
@@ -51,7 +51,7 @@ return function()
   -- The bedroom's bottom layer draws the bed's frame over the floorboards in
   -- the same 8x8 tiles, so it carries this mask: '#' is bed, '.' is floor.
   -- It covers the 32x32 pixels the frame occupies, starting 8 pixels into the
-  -- left art column.  The headboard panel inside the rails is drawn in the
+  -- left art column and one art row down (the rail row above keeps none).  The headboard panel inside the rails is drawn in the
   -- floorboards' own colours, but it reads as part of the bed, so it is kept.
   local BED_FRAME = {
     ".....######################.....",
@@ -92,7 +92,9 @@ return function()
   -- but the side ones are floor with the frame's outer 3 pixels in them, so
   -- the footprint is the middle column alone: the pillow, which the player
   -- can walk onto to lie under the blanket (the top layer, drawn over them),
-  -- and the foot, which blocks.
+  -- and the foot, which blocks.  The headboard's top rail, its last two
+  -- pixel rows, is the top layer of the row above the pillow, whose bottom
+  -- layer is floor.
   Furniture.BED = {
     id = "bed",
     decorId = 121,
@@ -107,12 +109,13 @@ return function()
     },
     source = BEDROOM,
     art = {
-      x = -1,
+      x = -1, y = -1,
       cells = {
+        { 0x27B, 0x27C, 0x27D },
         { 0x283, 0x284, 0x285 },
         { 0x28B, 0x28C, 0x28D },
       },
-      bottom = { mask = BED_FRAME, x = 8, y = 0 },
+      bottom = { mask = BED_FRAME, x = 8, y = 16 },
     },
   }
 

@@ -205,7 +205,7 @@ return function(mod)
   local function eachArtCell(piece, left, top, fn)
     for row, line in ipairs(piece.art.cells) do
       for col in ipairs(line) do
-        fn(left + piece.art.x + col - 1, top + row - 1, row - 1, col - 1)
+        fn(left + piece.art.x + col - 1, top + (piece.art.y or 0) + row - 1, row - 1, col - 1)
       end
     end
   end
@@ -530,7 +530,7 @@ return function(mod)
       -- once per piece: from its footprint's top-left cell to the art cell
       if onAnim and cell.row == 0 and cell.col == 0 and switchedOn[cell.piece.id] then
         local animation = animationFor(cell.piece)
-        if animation and fieldDrawCount % animation.period == 0 then invalidate(cell.x + cell.piece.art.x + onAnim.col, cell.y + onAnim.row) end
+        if animation and fieldDrawCount % animation.period == 0 then invalidate(cell.x + cell.piece.art.x + onAnim.col, cell.y + (cell.piece.art.y or 0) + onAnim.row) end
       end
     end
   end
@@ -729,8 +729,9 @@ return function(mod)
     end)
 
     -- PACK UP finds a decoration by its footprint.  A cursor on a cell only
-    -- this mod's art reaches (the bed's frame in the next column) finds the
-    -- piece too, unless a decoration's footprint is there.
+    -- this mod's art reaches (the bed's frame in the next column, its rail in
+    -- the row above) finds the piece too, unless a decoration's footprint is
+    -- there.
     wrap(Decor, "markForRemoval", function(original)
       return function(grid, context, x, y, ...)
         local marked = original(grid, context, x, y, ...)
@@ -738,7 +739,8 @@ return function(mod)
         local cell = state.art[cellKey(x, y)]
         for _, layer in ipairs(cell and cell.layers or {}) do
           local footprintLeft = x - layer.piece.art.x - layer.col
-          local retried = original(grid, context, footprintLeft, y, ...)
+          local footprintTopY = y - (layer.piece.art.y or 0) - layer.row
+          local retried = original(grid, context, footprintLeft, footprintTopY, ...)
           if #retried > 0 then return retried end
         end
         return marked

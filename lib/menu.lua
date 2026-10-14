@@ -142,7 +142,7 @@ return function(Lib)
         for col in ipairs(line) do
           local slot = preview.slots[row][col]
           local screenX = cursorX + (piece.art.x + col - 1) * 16
-          local screenY = cursorY - (piece.height - row) * 16
+          local screenY = cursorY - (piece.height - row - (piece.art.y or 0)) * 16
           love.graphics.draw(preview.atlas.image, quad(preview.atlas.image, slot), screenX, screenY)
           love.graphics.draw(preview.atlas.overImage, quad(preview.atlas.overImage, slot), screenX, screenY)
         end
