@@ -106,7 +106,7 @@ return function()
   Furniture.BED = {
     id = "bed",
     decorId = 121,
-    name = "BED",
+    name = "HEALING BED",
     description = "A comfy bed. Rest\nin it to heal your\nPOKéMON.",
     shape = 5, -- DECORSHAPE_1x2
     width = 1, height = 2,
@@ -138,7 +138,7 @@ return function()
   Furniture.PC = {
     id = "pc",
     decorId = 122,
-    name = "PC",
+    name = "{PKMN} CENTER PC", -- {PKMN}: the font's PK and MN glyphs
     description = "A POKéMON CENTER\nPC. Store items\nand POKéMON in it.",
     shape = 6, -- DECORSHAPE_1x3
     width = 1, height = 3,
@@ -180,7 +180,7 @@ return function()
   Furniture.TV = {
     id = "tv",
     decorId = 123,
-    name = "TV",
+    name = "STANDARD TV", -- ORNAMENT already holds a TV, a ROUND TV and a CUTE TV
     description = "A TV to catch the\nlatest shows and\nthe news.",
     shape = 6, -- DECORSHAPE_1x3
     width = 1, height = 3,
