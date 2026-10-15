@@ -21,7 +21,9 @@
 --              occupy nothing, so a piece can stand against a wall while its
 --              edge pixels still reach into the neighbouring cell.
 -- Grids are listed top row first.
--- `source` is the vanilla map whose tilesets the art is drawn from.
+-- `source` is the vanilla map whose tilesets the art is drawn from, or the
+-- overworld sprite (`sprite`, lib/rom_sprite.lua) a person is drawn from,
+-- with `colors` taken from other sprites' palettes.
 -- `bottom` says what to keep of each art cell's bottom layer: false drops it
 -- all, `keep` chooses per cell, `mask` chooses per pixel.
 -- `topOver` puts a cell's top layer over the player whatever its layer type.
@@ -35,10 +37,14 @@
 -- a show on air) and `onAnim` the tileset animation that plays then on the
 -- art cell `row`/`col`: the bank `file` of tileset pair `pair`, whose
 -- anim_manifest.lua gives its frames, period and where that cell's mid is.
+-- `facing` is a person's art for each way they look (down, up, left,
+-- right); they look down and turn to whoever talks to them, as the game's
+-- standing people do.
 -- `script` is what A runs on the piece: from any side, or with `fromBelow`
--- only facing up at row `screenRow`, as the game's own PCs and TVs ask.
--- `clerk` instead names a shop clerk's script (its key in the ROM's
--- scripts), which A runs as the clerk would.
+-- only facing up at row `screenRow`, as the game's own PCs and TVs ask, or
+-- from any side but only at row `talkRow`, as a person's feet.
+-- `personScript` instead names a person's script (its key in the ROM's
+-- scripts), which A runs as that person would, without them there.
 
 return function()
   local Furniture = {}
@@ -250,7 +256,7 @@ return function()
     decorId = 124,
     name = "BATTLE STORE",
     description = "Sells what the\nBATTLE FRONTIER's\nclerk sells.",
-    clerk = "g3:08267acc", -- BattleFrontier_Mart_EventScript_Clerk
+    personScript = "g3:08267acc", -- BattleFrontier_Mart_EventScript_Clerk
     art = { recolor = { [117] = 120, [118] = 116, [121] = 123 } },
   })
 
@@ -263,11 +269,73 @@ return function()
     decorId = 125,
     name = "HUNTING STORE",
     description = "Sells BALLS and\nthe goods of\nLILYCOVE's 2F.",
-    clerk = "g3:0821fb48", -- LilycoveCity_DepartmentStore_2F_EventScript_ClerkLeft
+    personScript = "g3:0821fb48", -- LilycoveCity_DepartmentStore_2F_EventScript_ClerkLeft
     art = { recolor = { [117] = 124, [118] = 125, [121] = 123 } },
   })
 
-  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.BATTLE_STORE, Furniture.HUNTING_STORE }
+  -- A person of the game, drawn from the BLACK_BELT's overworld sprite
+  -- (OBJ_EVENT_GFX_BLACK_BELT, 44) in other colours of the four palettes the
+  -- game's people share (NPC 1-4: NINJA_BOY 5, TWIN 6, BLACK_BELT 44,
+  -- LITTLE_BOY 11), standing as the game's standing people do: the feet
+  -- cell blocks and is talked to from any side, the head cell is drawn over
+  -- the player, who can walk behind them.  Their standing frames are 0
+  -- (down), 1 (up) and 2 (left), mirrored for right.  A runs the person's own
+  -- script, which opens by turning them to the player (applymovement), done
+  -- here by drawing them facing the player instead.
+  local BLACK_BELT = 44
+  local TWIN, LITTLE_BOY = 6, 11
+  local function frameCells(frame, flip)
+    local top = (flip and 1024 or 0) + frame * 2 -- RomSprite.mid
+    return { { top }, { top + 1 } }
+  end
+  local function person(piece)
+    piece.shape = 5 -- DECORSHAPE_1x2
+    piece.width, piece.height = 1, 2
+    piece.talkRow = 1
+    piece.blocked = { { false }, { true } }
+    piece.wallRows = 1
+    piece.art.x = 0
+    piece.art.facing = { down = frameCells(0), up = frameCells(1), left = frameCells(2), right = frameCells(2, true) }
+    piece.art.cells = piece.art.facing.down
+    piece.art.bottom = { keep = { { true }, { true } } }
+    piece.art.over = { { true }, { false } }
+    return piece
+  end
+
+  -- FallarborTown_MoveRelearnersHouse_EventScript_MoveRelearner: a move
+  -- back for a HEART SCALE.  Navy kimono and headband (NPC 4's blues, LITTLE
+  -- BOY's palette), blond hair (NPC 2's yellows, TWIN's).
+  Furniture.MOVE_RELEARNER = person({
+    id = "move_relearner",
+    decorId = 126,
+    name = "MOVE RELEARNER",
+    description = "Teaches a POKéMON\na move again for\na HEART SCALE.",
+    personScript = "g3:08201383",
+    source = { sprite = BLACK_BELT, colors = {
+      [14] = { LITTLE_BOY, 5 }, [5] = { LITTLE_BOY, 6 }, [6] = { LITTLE_BOY, 6 }, [7] = { LITTLE_BOY, 7 },
+      [11] = { TWIN, 5 }, [12] = { TWIN, 6 }, [13] = { TWIN, 7 },
+    } },
+    art = {},
+  })
+
+  -- LilycoveCity_MoveDeletersHouse_EventScript_MoveDeleter: makes a POKéMON
+  -- forget a move, HMs too.  The BLACK_BELT's white kimono and green belt,
+  -- dark skin (the browns of NPC 2 and 3) and black hair.
+  Furniture.MOVE_DELETER = person({
+    id = "move_deleter",
+    decorId = 127,
+    name = "MOVE DELETER",
+    description = "Makes a POKéMON\nforget a move,\nHMs included.",
+    personScript = "g3:0821ea0b",
+    source = { sprite = BLACK_BELT, colors = {
+      [1] = { TWIN, 11 }, [2] = { TWIN, 7 }, [3] = { BLACK_BELT, 13 }, [4] = { TWIN, 13 },
+      [11] = { BLACK_BELT, 7 }, [12] = { TWIN, 13 }, [13] = { BLACK_BELT, 15 },
+    } },
+    art = {},
+  })
+
+  Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.BATTLE_STORE, Furniture.HUNTING_STORE,
+    Furniture.MOVE_RELEARNER, Furniture.MOVE_DELETER }
 
   return Furniture
 end

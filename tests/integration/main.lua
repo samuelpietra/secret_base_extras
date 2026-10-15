@@ -1,6 +1,7 @@
 -- Runs the mod's real entry on stand-ins for the engine modules it wraps, then
 -- walks the in-game paths: base load, field draw, TV on/blink/off, PC screen,
--- A on the bed and the stores, PACK UP, placement rules.
+-- A on the bed, the stores and the people (who turn to the player), PACK UP,
+-- placement rules.
 local E = os.getenv("SBE_ENGINE") .. "/"
 local MOD = os.getenv("SBE_MOD") .. "/"
 local EM = os.getenv("SBE_INSTALL") .. "/emerald/"
@@ -27,8 +28,9 @@ function love.load()
     function layout:cellAt(x, y) return self.overrides[y * 1024 + x] or self.cells[y * W + x + 1] end
     local def = { id = "EM_SECRET_BASE_TREE4", pair = "secret_base__secret_base_tree", midLayout = layout }
     local session = { map = def.id, decorationInventory = {}, modData = {},
-      secretBases = { { decorations = { 121, 122, 123, 124, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
-        decorationPositions = { 3 * 16 + 3, 4 * 16 + 6, 7 * 16 + 9, 11 * 16 + 4, 12 * 16 + 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } } }
+      secretBases = { { decorations = { 121, 122, 123, 124, 125, 126, 127, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
+        decorationPositions = { 3 * 16 + 3, 4 * 16 + 6, 7 * 16 + 9, 11 * 16 + 4, 12 * 16 + 4, 2 * 16 + 11, 4 * 16 + 11,
+          0, 0, 0, 0, 0, 0, 0, 0, 0 } } } }
     -- floor atlas of the base pair: every mid in slot 0, grey
     local floorImage = love.image.newImageData(16, 16)
     for y = 0, 15 do for x = 0, 15 do floorImage:setPixel(x, y, 0.5, 0.4, 0.3, 1) end end
@@ -75,9 +77,16 @@ function love.load()
     local Tv = fake("src.core.game3.rse.tv", { setScreens = function() return 0 end })
     -- the ROM's scripts, as the engine's bundle holds them
     local romScripts = assert(loadstring(slurp(EM .. "data/generated/gba/scripts/scripts.lua")))()
-    local Space = fake("src.core.game3.scripting.space", { bundle = { scripts = romScripts } })
+    local running = false
+    local Space = fake("src.core.game3.scripting.space", { bundle = { scripts = romScripts },
+      vm = { isRunning = function() return running end } })
     fake("src.ui.game3.rse.decoration", { open = function(o) return o end, openTrade = function() end, draw = function() end })
-    fake("src.core.game3.dataset", { cache = function() return { read = function(_, rel) return slurp(EM .. rel) end } end })
+    -- the engine's cache reader inflates .rgba and .idx blobs, so this one does too
+    local CacheBlob = require("src.import.CacheBlob")
+    fake("src.core.game3.dataset", { cache = function() return { read = function(_, rel)
+      local bytes = slurp(EM .. rel)
+      return bytes and CacheBlob.decode(rel, bytes)
+    end } end })
 
     local handlers = {}
     local entry = assert(loadstring(slurp(MOD .. "main.lua")))()
@@ -89,8 +98,8 @@ function love.load()
     check("bed foot blocks", layout.overrides[3 * 1024 + 3] ~= nil and layout.overrides[3 * 1024 + 3].coll == 7)
     check("bed pillow walkable", layout.overrides[2 * 1024 + 3] == nil)
     local owned = true
-    for id = 121, 125 do owned = owned and DecorInv.has(id, session) end
-    check("inventory has the five pieces", owned)
+    for id = 121, 127 do owned = owned and DecorInv.has(id, session) end
+    check("inventory has the seven pieces", owned)
     check("a store's lower cell blocks", layout.overrides[4 * 1024 + 11] ~= nil and layout.overrides[4 * 1024 + 11].coll == 7)
     check("a store's upper cell is walkable", layout.overrides[3 * 1024 + 11] == nil)
     -- field draw: the furniture cells come from the mod's pair
@@ -159,6 +168,41 @@ function love.load()
     local hunt = Space.bundle.scripts[scripts[#scripts]]
     check("A on HUNTING STORE from below runs the 2F left clerk's script", ops(hunt) == CLERK_OPS and martOf(hunt) == "g3:0821fb60", ops(hunt))
     check("A on a store from the side does nothing", SB.interactBg(11, 4, "left") == false)
+    -- people: the MOVE RELEARNER's feet at (2,11), head at (2,10)
+    local relearnerFeet, relearnerHead = { 2, 11 }, { 2, 10 }
+    check("a person's feet block, their head is walkable", layout.overrides[11 * 1024 + 2] ~= nil
+      and layout.overrides[11 * 1024 + 2].coll == 7 and layout.overrides[10 * 1024 + 2] == nil)
+    draw({ relearnerFeet, relearnerHead })
+    local downFeet = plannedCell[relearnerFeet][1]
+    local headSig = plannedCell[relearnerHead][1]
+    local overArtHead = false
+    for i = 256, 511 do if headSig:sub(i * 13 + 13, i * 13 + 13) == "1" then overArtHead = true break end end
+    check("a person's head is drawn over the player", overArtHead)
+    check("A on a person's head does nothing", SB.interactBg(2, 10, "down") == false)
+    SB.interactBg(2, 11, "right")
+    local relearner = Space.bundle.scripts[scripts[#scripts]]
+    check("A on the MOVE RELEARNER runs the relearner's script without turning moves",
+      scripts[#scripts] == "secret_base_extras:move_relearner" and relearner and relearner[1].op == "lockall"
+      and relearner[2].op == "checkflag", ops(relearner))
+    draw({ relearnerFeet })
+    local turnedFeet = plannedCell[relearnerFeet][1]
+    check("talked to from the left, the person turns", turnedFeet ~= downFeet)
+    running = true
+    draw({ relearnerFeet })
+    check("the person stays turned while the talk runs", plannedCell[relearnerFeet][1] == turnedFeet)
+    running = false
+    draw({ relearnerFeet })
+    draw({ relearnerFeet })
+    check("the person looks down again once the talk ends", plannedCell[relearnerFeet][1] == downFeet)
+    SB.interactBg(4, 11, "up")
+    local deleter = Space.bundle.scripts[scripts[#scripts]]
+    check("A on the MOVE DELETER runs the deleter's script", scripts[#scripts] == "secret_base_extras:move_deleter"
+      and deleter and deleter[2].op == "loadword", ops(deleter))
+    running = true; draw({ relearnerFeet }); running = false
+    local deleterFeet = { 4, 11 }
+    draw({ relearnerFeet, deleterFeet })
+    check("the two people, both looking down, are drawn in different colours",
+      plannedCell[relearnerFeet][1] == downFeet and plannedCell[deleterFeet][1] ~= downFeet)
     -- placement rules
     local MB = require("src.core.game3.mb")
     -- the engine hands out its own behaviour ids, not the ROM's

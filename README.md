@@ -11,12 +11,16 @@ that a Secret Base never offered:
 | **STANDARD TV** | the NPC houses | Every show on air, like any TV in the game: it lights up and blinks when there is something new to watch and switches off once you have watched it. |
 | **BATTLE STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Battle Frontier's clerk sells: ULTRA BALL, HYPER POTION, MAX POTION, FULL RESTORE, FULL HEAL, REVIVE, MAX REPEL, PROTEIN, CALCIUM, IRON, ZINC, CARBOS, HP UP. Red panel. |
 | **HUNTING STORE** | the Lilycove Dept. Store rooftop | A vending machine selling what the Dept. Store 2F's left clerk sells, for catching: POKé BALL, GREAT BALL, ULTRA BALL, ESCAPE ROPE, FULL HEAL, ANTIDOTE, PARLYZ HEAL, BURN HEAL, ICE HEAL, AWAKENING, FLUFFY TAIL. Purple panel. |
+| **MOVE RELEARNER** | Fallarbor Town | A person, drawn as a BLACK BELT in a navy kimono with blond hair. Teaches a Pokémon a move again for a HEART SCALE. |
+| **MOVE DELETER** | Lilycove City | A person, drawn as a BLACK BELT with dark skin and black hair. Makes a Pokémon forget a move, HMs included. |
 
 The HEALING BED, PKMN CENTER PC and STANDARD TV behave exactly as their
 originals do: same scripts, same collision, same animation. The two stores are
 the rooftop's vending machine, recoloured from its own palette so they tell
 apart, and greet you as their clerk does ("Welcome! How may I serve you?")
-before opening the same shop, with the same items and prices. They are placed,
+before opening the same shop, with the same items and prices. The MOVE RELEARNER and MOVE DELETER are a
+person of the game, the BLACK BELT, in other colours of the palettes the
+game's people share, and say and do what their originals do. They are placed,
 packed up and moved with the regular DECORATE and PACK UP commands, and saved
 with your base.
 
@@ -66,7 +70,7 @@ screen is not enough.
 
 At the PC in your own Secret Base, choose **DECORATION → DECORATE**. The
 category list scrolls, like the Start menu does, to fit **EXTRA** after the
-eight vanilla categories. The five pieces are already in it: the mod gives
+eight vanilla categories. The seven pieces are already in it: the mod gives
 them to you, and gives back any you toss.
 
 ### Where each piece may stand
@@ -83,6 +87,10 @@ them to you, and gives back any you toss.
   plant: the lower one blocks and you shop from the cell below it, facing up;
   the upper one you can walk behind. Their top cell may stand over the north
   wall.
+- **MOVE RELEARNER** and **MOVE DELETER** stand like the game's people: their
+  feet block and their head you can walk behind. Talk to them from any side;
+  they turn to you and look down again when you are done. Their head may stand
+  over the north wall.
 
 ## Saves, and removing the mod
 
@@ -148,6 +156,7 @@ Keep `manifest.json`'s `version` field in step with the tag.
 | `main.lua` | Wiring: the engine hooks, the furniture standing in the current base, placement rules, the A button. |
 | `lib/furniture.lua` | The recipe of each piece: source map, metatiles, footprint, collision, script, animation. A new piece starts here. |
 | `lib/rom_tileset.lua` | Reads a vanilla map's tilesets from the imported ROM data. |
+| `lib/rom_sprite.lua` | Reads a person's overworld sprite from the imported ROM data, in the colours a piece gives it. |
 | `lib/atlas.lua` | Composes the furniture over the base's own floor into a tileset of the mod's own. |
 | `lib/menu.lua` | The two DECORATE pictures the mod draws: the scrolling category list and the placement preview. |
 | `lib/save_compat.lua` | Writes saves the game understands without the mod, and puts the furniture back on load. |

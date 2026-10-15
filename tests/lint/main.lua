@@ -33,7 +33,7 @@ function love.load()
       if type(k) == "proto" or (type(k) ~= "string" and type(k) ~= "table" and k ~= nil and tostring(k):find("proto")) then walk(k, found) end
     end
   end
-  for _, rel in ipairs({ "main.lua", "lib/rom_tileset.lua", "lib/furniture.lua", "lib/atlas.lua", "lib/menu.lua", "lib/save_compat.lua" }) do
+  for _, rel in ipairs({ "main.lua", "lib/rom_tileset.lua", "lib/rom_sprite.lua", "lib/furniture.lua", "lib/atlas.lua", "lib/menu.lua", "lib/save_compat.lua" }) do
     local chunk, err = loadstring(slurp(MOD .. rel), rel)
     if not chunk then print(rel, "COMPILE ERROR", err) else
       local found = {}

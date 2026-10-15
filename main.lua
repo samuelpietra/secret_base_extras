@@ -5,7 +5,9 @@
 -- party with the Weather Institute's bed script), a Pokemon Center PC (item
 -- storage and the boxes), a TV (the houses' one, with every show the game's
 -- TVs have) and two of the Lilycove rooftop's vending machines, selling what
--- the Battle Frontier's clerk and the Department Store 2F's left clerk sell.
+-- the Battle Frontier's clerk and the Department Store 2F's left clerk sell,
+-- and two people, the Move Relearner and the Move Deleter, drawn from a
+-- person of the game in other colours of the game's own palettes.
 -- All are given to the player outright and are placed,
 -- packed up and saved like any other decoration (lib/furniture.lua).
 --
@@ -85,6 +87,7 @@ return function(mod)
     return chunk()(Lib)
   end
   Lib.RomTileset = libChunk("rom_tileset")
+  Lib.RomSprite = libChunk("rom_sprite")
   Lib.Furniture = libChunk("furniture")
   Lib.Atlas = libChunk("atlas")
   Lib.Menu = libChunk("menu")
@@ -104,14 +107,17 @@ return function(mod)
     return Dataset and Dataset.cache and Dataset.cache() or nil
   end
 
+  -- A source is a map's tileset pair or, for a person, a sprite in its
+  -- colours; each recipe source table is read once.
   local function tilesetFor(source)
-    local tileset = tilesetBySource[source.mapDir]
+    local tileset = tilesetBySource[source]
     if tileset then return tileset end
     local cache = datasetCache()
     local why = "no dataset cache"
-    if cache then tileset, why = Lib.RomTileset.forMap(cache, source.mapDir, source.pretName) end
+    if cache and source.sprite then tileset, why = Lib.RomSprite.load(cache, source.sprite, source.colors)
+    elseif cache then tileset, why = Lib.RomTileset.forMap(cache, source.mapDir, source.pretName) end
     if not tileset then error(why, 0) end
-    tilesetBySource[source.mapDir] = tileset
+    tilesetBySource[source] = tileset
     return tileset
   end
 
@@ -176,6 +182,9 @@ return function(mod)
   -- show on air).  fieldDrawCount counts field draws, the clock of onAnim.
   local switchedOn = {}
   local fieldDrawCount = 0
+  -- facingOf[piece.id]: the way a person looks ("down" when absent), and
+  -- turnedTo[piece.id] the talk that turned them, until it ends.
+  local facingOf, turnedTo = {}, {}
 
   local function currentSession()
     local Runtime = engineModule(ENGINE.runtime)
@@ -277,7 +286,7 @@ return function(mod)
   -- collision overrides are cleared by every map load, which is why this runs
   -- on every load and not once.
   local function onBaseLoaded()
-    switchedOn = {}
+    switchedOn, facingOf, turnedTo = {}, {}, {}
     local session = currentSession()
     restorePlaced(session)
     ensureOwned(session)
@@ -371,7 +380,8 @@ return function(mod)
   -- ------- graphics
 
   local function artMid(piece, row, col, on)
-    local grid = (on and piece.art.cellsOn) or piece.art.cells
+    local grid = (piece.art.facing and piece.art.facing[facingOf[piece.id] or "down"])
+      or (on and piece.art.cellsOn) or piece.art.cells
     return grid[row + 1][col + 1]
   end
 
@@ -512,13 +522,42 @@ return function(mod)
     return state.slotByPicture[picture]
   end
 
+  local function redraw(piece)
+    for _, cell in pairs(state.art or {}) do
+      for _, layer in ipairs(cell.layers) do
+        if layer.piece == piece then invalidate(cell.x, cell.y) break end
+      end
+    end
+  end
+
   -- Switching a piece on or off redraws its art cells.
   local function setSwitchedOn(piece, on)
     if (switchedOn[piece.id] == true) == (on == true) then return end
     switchedOn[piece.id] = on == true
-    for _, cell in pairs(state.art or {}) do
-      for _, layer in ipairs(cell.layers) do
-        if layer.piece == piece then invalidate(cell.x, cell.y) break end
+    redraw(piece)
+  end
+
+  local function setFacing(piece, facing)
+    if (facingOf[piece.id] or "down") == facing then return end
+    facingOf[piece.id] = facing ~= "down" and facing or nil
+    redraw(piece)
+  end
+
+  local function scriptRunning()
+    local Space = engineModule(ENGINE.scriptSpace)
+    local vm = Space and Space.vm
+    return vm ~= nil and vm.isRunning ~= nil and vm:isRunning() == true
+  end
+
+  -- A person turned to talk looks down again once the talk has run and
+  -- ended; if no script is seen running within a second, it never started.
+  local TALK_START_TICKS = 60
+  local function settleTalks()
+    for id, talk in pairs(turnedTo) do
+      if scriptRunning() then talk.seenRunning = true
+      elseif talk.seenRunning or fieldDrawCount - talk.since > TALK_START_TICKS then
+        turnedTo[id] = nil
+        setFacing(talk.piece, "down")
       end
     end
   end
@@ -528,6 +567,7 @@ return function(mod)
   local function tick()
     fieldDrawCount = fieldDrawCount + 1
     if not state.active then return end
+    settleTalks()
     for _, cell in pairs(state.footprint) do
       local onAnim = cell.piece.art.onAnim
       -- once per piece: from its footprint's top-left cell to the art cell
@@ -827,30 +867,35 @@ return function(mod)
 
     -- --- using the furniture
 
-    -- A clerk piece runs its clerk's script from the ROM, put under a key of
-    -- this mod's own beside it in the engine's script bundle (Space.scriptKey
-    -- finds a script by its key there), with what needs a person taken out:
-    -- no one to face, and the lock and release of every object a background
-    -- event's script uses (lockall/releaseall, as the rooftop machine does).
-    local CLERK_ROWS = {
+    -- A person piece runs that person's script from the ROM, put under a key
+    -- of this mod's own beside it in the engine's script bundle
+    -- (Space.scriptKey finds a script by its key there), with what needs the
+    -- person there taken out of its first rows: turning to the player
+    -- (faceplayer, or applymovement and its waitmovement; a standing person
+    -- piece is drawn turned instead), and the lock and release of the one
+    -- object talked to, which become the lockall/releaseall of a background
+    -- event's script, as the rooftop machine's.
+    local PERSON_ROWS = {
       lock = { op = "lockall", opcode = 105 },
       release = { op = "releaseall", opcode = 107 },
       faceplayer = false,
+      applymovement = false,
+      waitmovement = false,
     }
-    local function clerkScript(piece)
+    local function personScript(piece)
       local Space = engineModule(ENGINE.scriptSpace)
       local scripts = Space and Space.bundle and Space.bundle.scripts
       if type(scripts) ~= "table" then return nil end
       local key = MOD_ID .. ":" .. piece.id
       if rawget(scripts, key) == nil then
-        local clerk = scripts[piece.clerk]
-        if type(clerk) ~= "table" then
-          log("%s: no clerk script %s", piece.id, tostring(piece.clerk))
+        local original = scripts[piece.personScript]
+        if type(original) ~= "table" then
+          log("%s: no script %s", piece.id, tostring(piece.personScript))
           return nil
         end
         local rows = {}
-        for _, row in ipairs(clerk) do
-          local replacement = CLERK_ROWS[row.op]
+        for _, row in ipairs(original) do
+          local replacement = PERSON_ROWS[row.op]
           if replacement == nil then rows[#rows + 1] = row
           elseif replacement then rows[#rows + 1] = replacement end
         end
@@ -859,20 +904,32 @@ return function(mod)
       return key
     end
 
+    -- The way a person faces to look at a player facing `facing`.
+    local FACING_BACK = { up = "down", down = "up", left = "right", right = "left",
+      [1] = "up", [2] = "down", [3] = "right", [4] = "left" }
+
     -- pokeemerald/src/field_control_avatar.c GetInteractedBackgroundEventScript
-    -- is where the field asks.  A piece runs its script from any side, or, if
+    -- is where the field asks.  A piece runs its script from any side; if
     -- fromBelow, only faced from below at its screen row, as the game's PCs
-    -- and TVs are (their behaviours' "facing up" rule).
+    -- and TVs are (their behaviours' "facing up" rule); if it has a talkRow,
+    -- from any side at that row, a person's feet, turning them to the player.
+    -- (facing is a direction name or the engine's DIR_* number, 1 down.)
     wrap(SB, "interactBg", function(original)
       return function(x, y, facing, elevation)
         local cell = state.active and state.footprint[cellKey(x, y)]
         if cell and inOwnBase(currentSession()) then
           local piece = cell.piece
-          if not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) then
-            local label = piece.clerk and clerkScript(piece) or piece.script
-            return label ~= nil and SB.startScript(label)
+          local reached
+          if piece.talkRow then reached = cell.row == piece.talkRow
+          else reached = not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) end
+          if not reached then return false end
+          local label = piece.personScript and personScript(piece) or piece.script
+          if label == nil then return false end
+          if piece.art.facing and FACING_BACK[facing] then
+            setFacing(piece, FACING_BACK[facing])
+            turnedTo[piece.id] = { piece = piece, since = fieldDrawCount, seenRunning = false }
           end
-          return false
+          return SB.startScript(label)
         end
         return original(x, y, facing, elevation)
       end

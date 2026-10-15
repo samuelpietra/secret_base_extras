@@ -12,12 +12,18 @@ function love.load()
     entry(fakeMod)
     print("entry ran")
     local V = {}
-    for _, n in ipairs({ "rom_tileset", "furniture", "atlas" }) do
+    for _, n in ipairs({ "rom_tileset", "rom_sprite", "furniture", "atlas" }) do
       local chunk = assert(loadstring(slurp(MOD .. "lib/" .. n .. ".lua"), n))
-      V[({ rom_tileset = "RomTileset", furniture = "Furniture", atlas = "Atlas" })[n]] = chunk()(V)
+      V[({ rom_tileset = "RomTileset", rom_sprite = "RomSprite", furniture = "Furniture", atlas = "Atlas" })[n]] = chunk()(V)
     end
-    local cache = { read = function(_, rel) return slurp(EM .. rel) end }
-    local function romOf(src) return assert(V.RomTileset.forMap(cache, src.mapDir, src.pretName)) end
+    -- the engine's cache reader inflates .rgba and .idx blobs, so this one does too
+    package.path = os.getenv("SBE_ENGINE") .. "/?.lua;" .. package.path
+    local CacheBlob = require("src.import.CacheBlob")
+    local cache = { read = function(_, rel) local bytes = slurp(EM .. rel); return bytes and CacheBlob.decode(rel, bytes) end }
+    local function romOf(src)
+      if src.sprite then return assert(V.RomSprite.load(cache, src.sprite, src.colors)) end
+      return assert(V.RomTileset.forMap(cache, src.mapDir, src.pretName))
+    end
     local floor = love.image.newImageData(16, 16)
     for y = 0, 15 do for x = 0, 15 do floor:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
     local floorTs = { imageData = floor, cols = 1 }
@@ -39,6 +45,10 @@ function love.load()
     add(V.Furniture.TV, V.Furniture.TV.art.cellsOn, 8, 0)
     add(V.Furniture.BATTLE_STORE, V.Furniture.BATTLE_STORE.art.cells, 11, 0)
     add(V.Furniture.HUNTING_STORE, V.Furniture.HUNTING_STORE.art.cells, 12, 0)
+    add(V.Furniture.MOVE_RELEARNER, V.Furniture.MOVE_RELEARNER.art.facing.down, 13, 0)
+    add(V.Furniture.MOVE_RELEARNER, V.Furniture.MOVE_RELEARNER.art.facing.right, 14, 0)
+    add(V.Furniture.MOVE_DELETER, V.Furniture.MOVE_DELETER.art.facing.down, 15, 0)
+    add(V.Furniture.MOVE_DELETER, V.Furniture.MOVE_DELETER.art.facing.up, 16, 0)
     -- the TV-on animation frames, as the mod reads them
     local blob = slurp(EM .. "data/generated/gba/native/building__generic_building/anim_building_tv_turned_on.idx")
     if blob:byte(1) == 0x78 then blob = love.data.decompress("string", "zlib", blob) end
@@ -49,8 +59,8 @@ function love.load()
       place[#place + 1] = { 9 + f, 1 }
     end
     local ts, mids = V.Atlas.build("t", floorTs, NT, list)
-    local out = love.image.newImageData(13 * 16, 4 * 16)
-    for y = 0, 63 do for x = 0, 207 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
+    local out = love.image.newImageData(17 * 16, 4 * 16)
+    for y = 0, 63 do for x = 0, 271 do out:setPixel(x, y, 0.55, 0.35, 0.3, 1) end end
     for i, p in ipairs(place) do
       local s = mids[i]
       for _, img in ipairs({ ts.imageData, ts.overImageData }) do
