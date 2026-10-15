@@ -4,10 +4,11 @@
 --
 -- Each cell is composed from what the base already shows there (its floor,
 -- wall or decoration, read from the engine's loaded atlas) with the art of
--- every piece reaching into it on top, in placement order.  Which
--- layer goes where follows the source metatile's own layer type, as
--- pokeemerald's DrawMetatile does: the bottom layer is always below the
--- player, the top layer is above them unless the metatile is COVERED.
+-- every piece reaching into it on top, in placement order.  Which layer goes
+-- where follows the source metatile's own layer type, as pokeemerald's
+-- DrawMetatile does: the bottom layer is always below the player, the top
+-- layer is above them unless the metatile is COVERED.  A piece's recipe can
+-- lift a cell over the player (`over`, `topOver`, lib/furniture.lua).
 
 return function(Lib)
   local Atlas = {}
@@ -37,12 +38,15 @@ return function(Lib)
     end
   end
 
+  local function keepNone() return false end
+
+  -- Which pixels of an art cell's bottom layer to paint: nil keeps them all.
   local function bottomKeep(piece, row, col)
     local bottom = piece.art.bottom
-    if not bottom then return function() return false end end
+    if not bottom then return keepNone end
     if bottom.keep then
       if bottom.keep[row + 1][col + 1] then return nil end
-      return function() return false end
+      return keepNone
     end
     if not bottom.mask then return nil end
     return function(x, y)
@@ -53,16 +57,18 @@ return function(Lib)
     end
   end
 
-  -- cells: list of { floorMid, layers = { { piece, tileset, row, col, mid, pixels }, ... } },
-  -- row/col being the art cell of the piece.  pixels, when given, is an
-  -- animation frame (256 palette slots) that stands in for the bottom layer.  Returns the pair table to
-  -- register and each cell's mid in it, in the same order.  floorAtlas false
-  -- composes the art alone, on a clear background, which is what the
-  -- placement preview draws over the map.
+  -- cells: list of { floorMid, layers = { { piece, tileset, row, col, mid,
+  -- pixels }, ... } }, row/col being the art cell of the piece; pixels, when
+  -- given, is an animation frame (256 palette slots) that stands in for the
+  -- bottom layer.  Returns the pair table to register and each cell's mid in
+  -- it, in the same order.  floorAtlas false composes the art alone, on a
+  -- clear background, which is what the placement preview draws over the map.
   function Atlas.build(pairName, floorAtlas, NativeTileset, cells)
     local rows = math.max(1, math.ceil(#cells / COLS))
     local under = love.image.newImageData(COLS * CELL, rows * CELL)
     local over = love.image.newImageData(COLS * CELL, rows * CELL)
+    -- the fields of a pair the engine fills when it loads one
+    -- (src/core/game3/tileset_native.lua), quads made by it on demand
     local atlas = { pair = pairName, midToSlot = {}, cols = COLS, rows = rows, midCount = #cells,
       layered = true, quads = {}, overQuads = {}, slotPix = {} }
     local mids = {}
@@ -76,19 +82,13 @@ return function(Lib)
         if floorAtlas.overImageData then copyCell(over, slotX, slotY, floorAtlas.overImageData, floorX, floorY) end
       end
       for _, layer in ipairs(cell.layers) do
-        local tileset = layer.tileset
-        local art = layer.piece.art
-        local recolor = art.recolor
+        local tileset, art = layer.tileset, layer.piece.art
         local cellOver = art.over and art.over[layer.row + 1][layer.col + 1]
-        paint(cellOver and over or under, slotX, slotY, tileset, layer.pixels or tileset:layer(layer.mid, 0),
-          bottomKeep(layer.piece, layer.row, layer.col), recolor)
-        local top = tileset:layer(layer.mid, 1)
         local topOver = cellOver or (art.topOver and art.topOver[layer.row + 1][layer.col + 1])
-        if not topOver and tileset:layerType(layer.mid) == Lib.RomTileset.LAYER.COVERED then
-          paint(under, slotX, slotY, tileset, top, nil, recolor)
-        else
-          paint(over, slotX, slotY, tileset, top, nil, recolor)
-        end
+        local topUnder = not topOver and tileset:layerType(layer.mid) == Lib.RomTileset.LAYER.COVERED
+        paint(cellOver and over or under, slotX, slotY, tileset, layer.pixels or tileset:layer(layer.mid, 0),
+          bottomKeep(layer.piece, layer.row, layer.col), art.recolor)
+        paint(topUnder and under or over, slotX, slotY, tileset, tileset:layer(layer.mid, 1), nil, art.recolor)
       end
       atlas.midToSlot[slot] = slot
       mids[i] = slot

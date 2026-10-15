@@ -68,7 +68,8 @@ return function(Lib)
         local colors = menuColors(engine.Decor, disabled(screen, engine.Decor, cat))
         local name = cat == Lib.Furniture.CATEGORY.index and Lib.Furniture.CATEGORY.name or text(CATEGORY_TEXT[cat])
         engine.FrlgFont.draw(name, ox + 8, y, { colors = colors })
-        local filled = string.format("%2d/%2d", engine.DecorInv.countInCategory(cat, session), engine.DecorInv.SIZES[cat])
+        local owned = engine.DecorInv.countInCategory(cat, session)
+        local filled = string.format("%2d/%2d", owned, engine.DecorInv.SIZES[cat])
         engine.FrlgFont.draw(filled, ox + 104 - engine.FrlgFont.measure(filled), y, { colors = colors })
       end
     end
@@ -142,7 +143,7 @@ return function(Lib)
         for col in ipairs(line) do
           local slot = preview.slots[row][col]
           local screenX = cursorX + (piece.art.x + col - 1) * 16
-          local screenY = cursorY - (piece.height - row - (piece.art.y or 0)) * 16
+          local screenY = cursorY - (piece.height - row - piece.art.y) * 16
           love.graphics.draw(preview.atlas.image, quad(preview.atlas.image, slot), screenX, screenY)
           love.graphics.draw(preview.atlas.overImage, quad(preview.atlas.overImage, slot), screenX, screenY)
         end

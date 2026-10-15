@@ -16,7 +16,6 @@ return function()
   -- pokeemerald/include/fieldmap.h
   local NUM_TILES_IN_PRIMARY = 512
   local NUM_METATILES_IN_PRIMARY = 0x200
-  -- pokeemerald/include/fieldmap.h
   local NUM_PALS_IN_PRIMARY = 6
   -- pokeemerald/include/global.fieldmap.h (METATILE_ATTR_LAYER_SHIFT)
   local LAYER_SHIFT = 2 ^ 12
@@ -26,6 +25,14 @@ return function()
 
   local function u16(s, i)
     return s:byte(i) + s:byte(i + 1) * 256
+  end
+
+  -- A BGR555 colour as love's 0-1 channels, rounded as the engine's
+  -- bgr555_to_rgb8 does (src/import/gba/native_pack.lua), so furniture is
+  -- the exact colour it is in its vanilla map.
+  function RomTileset.rgb(bgr)
+    local function channel(v) return math.floor(v * 255 / 31 + 0.5) / 255 end
+    return channel(bgr % 32), channel(math.floor(bgr / 32) % 32), channel(math.floor(bgr / 1024) % 32)
   end
 
   local function readAll(cache, dir)
@@ -106,16 +113,11 @@ return function()
     return out
   end
 
-  -- Palettes 0-5 come from the primary
-  -- tileset, the rest from the secondary.  Rounding matches the engine's
-  -- bgr555_to_rgb8 (src/import/gba/native_pack.lua) so a piece of furniture
-  -- is the exact colour it is in its vanilla map.
+  -- Palettes 0-5 come from the primary tileset, the rest from the secondary.
   function Pair:color(slot)
     local palette = math.floor(slot / 16)
     local files = palette < NUM_PALS_IN_PRIMARY and self.primary or self.secondary
-    local color = u16(files["palettes.bin"], slot * 2 + 1)
-    local function channel(v) return math.floor(v * 255 / 31 + 0.5) / 255 end
-    return channel(color % 32), channel(math.floor(color / 32) % 32), channel(math.floor(color / 1024) % 32)
+    return RomTileset.rgb(u16(files["palettes.bin"], slot * 2 + 1))
   end
 
   return RomTileset

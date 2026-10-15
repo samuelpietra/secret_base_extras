@@ -16,10 +16,11 @@
 --              share them.  Like every decoration, a placed piece is recorded
 --              by its footprint's bottom-left cell.
 --   art        the vanilla metatiles drawn for it, `x` columns left of and
---              `y` rows above the footprint (0 when absent).  Art cells outside the footprint are drawn over
---              whatever stands there (floor, wall, another decoration) and
---              occupy nothing, so a piece can stand against a wall while its
---              edge pixels still reach into the neighbouring cell.
+--              `y` rows above the footprint (0 when absent).  Art cells
+--              outside the footprint are drawn over whatever stands there
+--              (floor, wall, another decoration) and occupy nothing, so a
+--              piece can stand against a wall while its edge pixels still
+--              reach into the neighbouring cell.
 -- Grids are listed top row first.
 -- `source` is the vanilla map whose tilesets the art is drawn from, or the
 -- overworld sprite (`sprite`, lib/rom_sprite.lua) a person is drawn from,
@@ -46,8 +47,11 @@
 -- `personScript` instead names a person's script (its key in the ROM's
 -- scripts), which A runs as that person would, without them there.
 
-return function()
+return function(Lib)
   local Furniture = {}
+
+  -- pokeemerald/include/decoration.h DECORSHAPE_*
+  local SHAPE_1x2, SHAPE_1x3 = 5, 6
 
   -- The category this mod adds after the eight vanilla ones, and how many
   -- items it holds (the vanilla ones hold 10 to 40).
@@ -65,8 +69,9 @@ return function()
   -- The bedroom's bottom layer draws the bed's frame over the floorboards in
   -- the same 8x8 tiles, so it carries this mask: '#' is bed, '.' is floor.
   -- It covers the 32x32 pixels the frame occupies, starting 8 pixels into the
-  -- left art column and one art row down (the rail row above keeps none).  The headboard panel inside the rails is drawn in the
-  -- floorboards' own colours, but it reads as part of the bed, so it is kept.
+  -- left art column and one art row down (the rail row above keeps none).
+  -- The headboard panel inside the rails is drawn in the floorboards' own
+  -- colours, but it reads as part of the bed, so it is kept.
   local BED_FRAME = {
     ".....######################.....",
     ".....######################.....",
@@ -114,7 +119,7 @@ return function()
     decorId = 121,
     name = "HEALING BED",
     description = "A comfy bed. Rest\nin it to heal your\nPOKéMON.",
-    shape = 5, -- DECORSHAPE_1x2
+    shape = SHAPE_1x2,
     width = 1, height = 2,
     script = "Route119_WeatherInstitute_1F_EventScript_Bed",
     blocked = {
@@ -146,7 +151,7 @@ return function()
     decorId = 122,
     name = "{PKMN} CENTER PC", -- {PKMN}: the font's PK and MN glyphs
     description = "A POKéMON CENTER\nPC. Store items\nand POKéMON in it.",
-    shape = 6, -- DECORSHAPE_1x3
+    shape = SHAPE_1x3,
     width = 1, height = 3,
     script = "EventScript_PC",
     fromBelow = true,
@@ -161,7 +166,6 @@ return function()
     wallRows = 2,
     source = POKEMON_CENTER,
     art = {
-      x = 0,
       cells = {
         { 0x20C },
         { 0x004 },
@@ -188,7 +192,7 @@ return function()
     decorId = 123,
     name = "STANDARD TV", -- ORNAMENT already holds a TV, a ROUND TV and a CUTE TV
     description = "A TV to catch the\nlatest shows and\nthe news.",
-    shape = 6, -- DECORSHAPE_1x3
+    shape = SHAPE_1x3,
     width = 1, height = 3,
     script = "EventScript_TV",
     fromBelow = true,
@@ -203,7 +207,6 @@ return function()
     wallRows = 2,
     source = HOUSE,
     art = {
-      x = 0,
       cells = {
         { 0x230 },
         { 0x002 },
@@ -221,30 +224,34 @@ return function()
     },
   }
 
-  -- A vending machine of LilycoveCity_DepartmentStoreRooftop (columns 9 and
-  -- 10), selling what a clerk elsewhere sells.  Its two metatiles fill two
-  -- cells exactly, bottom layer only and no floor in it, so it lines up with
-  -- the base's decorations as it is.  The lower cell blocks and the player
-  -- shops from the cell below it, facing up; the upper one, drawn over the
-  -- player, lets them walk behind the machine (on the rooftop it stands on
-  -- the wall).  The two machines differ in the colours of their panel, cans
-  -- and labels: slots 117, 118 and 121 of the machine's palette 7, painted in
-  -- other colours of that same palette.  A runs the clerk's own script
-  -- ("Welcome! How may I serve you?", the mart, "Please come again!"): same
-  -- items, same prices.
-  local function vendingMachine(piece)
-    piece.shape = 5 -- DECORSHAPE_1x2
+  -- One cell wide and two tall, standing like a vanilla plant: the lower
+  -- cell blocks, the upper one is drawn over the player, who can walk behind
+  -- it, and may stand on the north wall (pokeemerald DECORPERM_BEHIND_FLOOR).
+  -- Both cells keep their whole bottom layer, which carries no floor.
+  local function walkBehind(piece)
+    piece.shape = SHAPE_1x2
     piece.width, piece.height = 1, 2
-    piece.fromBelow, piece.screenRow = true, 1
     piece.blocked = { { false }, { true } }
-    -- like a vanilla plant (BEHIND_FLOOR): the top row may stand on the wall
     piece.wallRows = 1
-    piece.source = ROOFTOP
-    piece.art.x = 0
-    piece.art.cells = { { 0x26F }, { 0x277 } }
     piece.art.bottom = { keep = { { true }, { true } } }
     piece.art.over = { { true }, { false } }
     return piece
+  end
+
+  -- A vending machine of LilycoveCity_DepartmentStoreRooftop (columns 9 and
+  -- 10), selling what a clerk elsewhere sells.  Its two metatiles fill two
+  -- cells exactly, so it lines up with the base's decorations as it is (on
+  -- the rooftop it stands on the wall); the player shops from the cell below
+  -- it, facing up.  The two machines differ in the colours of their panel,
+  -- cans and labels: slots 117, 118 and 121 of the machine's palette 7,
+  -- painted in other colours of that same palette.  A runs the clerk's own
+  -- script ("Welcome! How may I serve you?", the mart, "Please come again!"):
+  -- same items, same prices.
+  local function vendingMachine(piece)
+    piece.fromBelow, piece.screenRow = true, 1
+    piece.source = ROOFTOP
+    piece.art.cells = { { 0x26F }, { 0x277 } }
+    return walkBehind(piece)
   end
 
   -- BattleFrontier_Mart_EventScript_Clerk's mart: ULTRA BALL, HYPER POTION,
@@ -276,30 +283,21 @@ return function()
   -- A person of the game, drawn from the BLACK_BELT's overworld sprite
   -- (OBJ_EVENT_GFX_BLACK_BELT, 44) in other colours of the four palettes the
   -- game's people share (NPC 1-4: NINJA_BOY 5, TWIN 6, BLACK_BELT 44,
-  -- LITTLE_BOY 11), standing as the game's standing people do: the feet
-  -- cell blocks and is talked to from any side, the head cell is drawn over
-  -- the player, who can walk behind them.  Their standing frames are 0
-  -- (down), 1 (up) and 2 (left), mirrored for right.  A runs the person's own
-  -- script, which opens by turning them to the player (applymovement), done
-  -- here by drawing them facing the player instead.
+  -- LITTLE_BOY 11), standing as the game's standing people do: the head
+  -- above, the feet, talked to from any side, below.  Their standing frames
+  -- are 0 (down), 1 (up) and 2 (left), mirrored for right.  A runs the
+  -- person's own script, which opens by turning them to the player
+  -- (applymovement), done here by drawing them facing the player instead.
   local BLACK_BELT = 44
   local TWIN, LITTLE_BOY = 6, 11
   local function frameCells(frame, flip)
-    local top = (flip and 1024 or 0) + frame * 2 -- RomSprite.mid
-    return { { top }, { top + 1 } }
+    return { { Lib.RomSprite.mid(frame, 0, flip) }, { Lib.RomSprite.mid(frame, 1, flip) } }
   end
   local function person(piece)
-    piece.shape = 5 -- DECORSHAPE_1x2
-    piece.width, piece.height = 1, 2
     piece.talkRow = 1
-    piece.blocked = { { false }, { true } }
-    piece.wallRows = 1
-    piece.art.x = 0
     piece.art.facing = { down = frameCells(0), up = frameCells(1), left = frameCells(2), right = frameCells(2, true) }
     piece.art.cells = piece.art.facing.down
-    piece.art.bottom = { keep = { { true }, { true } } }
-    piece.art.over = { { true }, { false } }
-    return piece
+    return walkBehind(piece)
   end
 
   -- FallarborTown_MoveRelearnersHouse_EventScript_MoveRelearner: a move
@@ -336,6 +334,9 @@ return function()
 
   Furniture.PIECES = { Furniture.BED, Furniture.PC, Furniture.TV, Furniture.BATTLE_STORE, Furniture.HUNTING_STORE,
     Furniture.MOVE_RELEARNER, Furniture.MOVE_DELETER }
+  for _, piece in ipairs(Furniture.PIECES) do
+    piece.art.x, piece.art.y = piece.art.x or 0, piece.art.y or 0
+  end
 
   return Furniture
 end

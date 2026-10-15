@@ -7,9 +7,9 @@
 -- TVs have) and two of the Lilycove rooftop's vending machines, selling what
 -- the Battle Frontier's clerk and the Department Store 2F's left clerk sell,
 -- and two people, the Move Relearner and the Move Deleter, drawn from a
--- person of the game in other colours of the game's own palettes.
--- All are given to the player outright and are placed,
--- packed up and saved like any other decoration (lib/furniture.lua).
+-- person of the game in other colours of the game's own palettes.  All are
+-- given to the player outright and are placed, packed up and saved like any
+-- other decoration (lib/furniture.lua).
 --
 -- What the engine already does for every decoration, it does for these:
 -- base.decorations / decorationPositions hold them, the cursor moves by their
@@ -49,7 +49,6 @@ return function(mod)
     field         = "src.core.game3.field",
     fieldPlan     = "src.core.game3.field_plan",
     fieldView     = "src.core.game3.field_view",
-    tv            = "src.core.game3.rse.tv",
     font          = "src.ui.game3.frlg_font",
     listMenu      = "src.ui.game3.list_menu",
     map           = "src.core.game3.map",
@@ -62,6 +61,7 @@ return function(mod)
     runtime       = "src.core.game3.runtime",
     scriptSpace   = "src.core.game3.scripting.space",
     secretBase    = "src.core.game3.rse.secret_base",
+    tv            = "src.core.game3.rse.tv",
     window        = "src.ui.game3.window",
   }
 
@@ -77,7 +77,7 @@ return function(mod)
 
   -- ------- mod-local modules
 
-  local Lib = { mod = mod }
+  local Lib = {}
   local function libChunk(name)
     local rel = "lib/" .. name .. ".lua"
     local source = mod:read(rel)
@@ -186,6 +186,10 @@ return function(mod)
   -- turnedTo[piece.id] the talk that turned them, until it ends.
   local facingOf, turnedTo = {}, {}
 
+  local function deactivate()
+    state = { active = false }
+  end
+
   local function currentSession()
     local Runtime = engineModule(ENGINE.runtime)
     return Runtime and Runtime.getSession and Runtime.getSession() or nil
@@ -217,7 +221,7 @@ return function(mod)
   local function eachArtCell(piece, left, top, fn)
     for row, line in ipairs(piece.art.cells) do
       for col in ipairs(line) do
-        fn(left + piece.art.x + col - 1, top + (piece.art.y or 0) + row - 1, row - 1, col - 1)
+        fn(left + piece.art.x + col - 1, top + piece.art.y + row - 1, row - 1, col - 1)
       end
     end
   end
@@ -290,16 +294,12 @@ return function(mod)
     local session = currentSession()
     restorePlaced(session)
     ensureOwned(session)
-    if not inOwnBase(session) or not loadFurnitureTilesets() then
-      state = { active = false }
-      return
-    end
     local Collision, SB, Decor = engineModule(ENGINE.collision), engineModule(ENGINE.secretBase),
       engineModule(ENGINE.decoration)
     local def = Collision and Collision._mapDef
     local layout = def and def.midLayout
-    if not (layout and SB and Decor) then
-      state = { active = false }
+    if not (inOwnBase(session) and loadFurnitureTilesets() and layout and SB and Decor) then
+      deactivate()
       return
     end
     state = { active = true, mapId = session.map, def = def, layout = layout, pair = def.pair or layout.pair,
@@ -411,11 +411,7 @@ return function(mod)
     for i, m in ipairs(bank and bank.mids or {}) do
       if m == mid then midIndex = i break end
     end
-    local blob = midIndex and cache:read(root .. anim.file)
-    if type(blob) == "string" and blob:byte(1) == 0x78 then
-      local inflated, raw = pcall(love.data.decompress, "string", "zlib", blob)
-      blob = inflated and raw or nil
-    end
+    local blob = midIndex and cache:read(root .. anim.file) -- inflated by the cache reader
     local count, midsPerFrame = bank and tonumber(bank.frames) or 0, bank and #bank.mids or 0
     if type(blob) ~= "string" or count < 1 or #blob < count * midsPerFrame * 256 then
       log("%s: no %s animation, its screen will not blink", piece.id, anim.file)
@@ -440,6 +436,11 @@ return function(mod)
     return animation and math.floor(fieldDrawCount / animation.period) % animation.count or 0
   end
 
+  -- One piece's art cell row/col as Atlas.build paints it.
+  local function artLayer(piece, row, col, mid, pixels)
+    return { piece = piece, tileset = tilesetFor(piece.source), row = row, col = col, mid = mid, pixels = pixels }
+  end
+
   -- A cell's picture is what the base shows there now (layout:midAt, which
   -- includes decorations) plus the art reaching into it, each piece on or off
   -- and, when animated, at the given frame.  The key names all of it, so a
@@ -462,8 +463,7 @@ return function(mod)
         if pixels then part = part .. ":" .. frame end
       end
       parts[#parts + 1] = part
-      layers[#layers + 1] = { piece = layer.piece, tileset = tilesetFor(layer.piece.source), row = layer.row, col = layer.col, mid = layerMid,
-        pixels = pixels }
+      layers[#layers + 1] = artLayer(layer.piece, layer.row, layer.col, layerMid, pixels)
     end
     return table.concat(parts, ","), baseMid, layers
   end
@@ -573,7 +573,9 @@ return function(mod)
       -- once per piece: from its footprint's top-left cell to the art cell
       if onAnim and cell.row == 0 and cell.col == 0 and switchedOn[cell.piece.id] then
         local animation = animationFor(cell.piece)
-        if animation and fieldDrawCount % animation.period == 0 then invalidate(cell.x + cell.piece.art.x + onAnim.col, cell.y + (cell.piece.art.y or 0) + onAnim.row) end
+        if animation and fieldDrawCount % animation.period == 0 then
+          invalidate(cell.x + cell.piece.art.x + onAnim.col, cell.y + cell.piece.art.y + onAnim.row)
+        end
       end
     end
   end
@@ -586,8 +588,7 @@ return function(mod)
     local NativeTileset = engineModule(ENGINE.nativeTileset)
     local list, artCells = {}, {}
     eachArtCell(piece, 0, 0, function(_, _, row, col)
-      list[#list + 1] = { layers = { { piece = piece, tileset = tilesetFor(piece.source), row = row, col = col,
-        mid = artMid(piece, row, col, false) } } }
+      list[#list + 1] = { layers = { artLayer(piece, row, col, artMid(piece, row, col, false)) } }
       artCells[#list] = { row = row, col = col }
     end)
     local atlas, mids = Lib.Atlas.build(VIRTUAL_PAIR .. "_preview", false, NativeTileset, list)
@@ -598,6 +599,59 @@ return function(mod)
     end
     previews[piece] = { atlas = atlas, slots = slots }
     return previews[piece]
+  end
+
+  -- ------- using the furniture
+
+  -- A person piece runs that person's script from the ROM, put under a key
+  -- of this mod's own beside it in the engine's script bundle
+  -- (Space.scriptKey finds a script by its key there), with what needs the
+  -- person there taken out of its first rows: turning to the player
+  -- (faceplayer, or applymovement and its waitmovement; a standing person
+  -- piece is drawn turned instead), and the lock and release of the one
+  -- object talked to, which become the lockall/releaseall of a background
+  -- event's script, as the rooftop machine's.
+  local PERSON_ROWS = {
+    lock = { op = "lockall", opcode = 105 },
+    release = { op = "releaseall", opcode = 107 },
+    faceplayer = false,
+    applymovement = false,
+    waitmovement = false,
+  }
+  local function personScript(piece)
+    local Space = engineModule(ENGINE.scriptSpace)
+    local scripts = Space and Space.bundle and Space.bundle.scripts
+    if type(scripts) ~= "table" then return nil end
+    local key = MOD_ID .. ":" .. piece.id
+    if rawget(scripts, key) == nil then
+      local original = scripts[piece.personScript]
+      if type(original) ~= "table" then
+        log("%s: no script %s", piece.id, tostring(piece.personScript))
+        return nil
+      end
+      local rows = {}
+      for _, row in ipairs(original) do
+        local replacement = PERSON_ROWS[row.op]
+        if replacement == nil then rows[#rows + 1] = row
+        elseif replacement then rows[#rows + 1] = replacement end
+      end
+      rawset(scripts, key, rows)
+    end
+    return key
+  end
+
+  -- The way a person faces to look at a player facing `facing`.
+  local FACING_BACK = { up = "down", down = "up", left = "right", right = "left",
+    [1] = "up", [2] = "down", [3] = "right", [4] = "left" }
+
+  -- Whether A, pressed at a footprint cell facing `facing`, reaches the
+  -- piece: from any side; if fromBelow, only from below at its screen row, as
+  -- the game's PCs and TVs are (their behaviours' "facing up" rule); if it
+  -- has a talkRow, from any side at that row, a person's feet.  (facing is a
+  -- direction name or the engine's DIR_* number, 1 down.)
+  local function reachedBy(piece, cell, facing)
+    if piece.talkRow then return cell.row == piece.talkRow end
+    return not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2))
   end
 
   -- ------- the DECORATE screen
@@ -689,6 +743,7 @@ return function(mod)
     local SB = engineModule(ENGINE.secretBase)
     local PcNatives = engineModule(ENGINE.pcNatives)
     local Player = engineModule(ENGINE.player)
+    local Tv = engineModule(ENGINE.tv)
     if not (Decor and DecorInv) then
       missingHooks[#missingHooks + 1] = "decoration modules"
       return
@@ -723,7 +778,9 @@ return function(mod)
     wrap(DecorInv, "count", function(original)
       return function(session, ...)
         local total = original(session, ...)
-        if Decor.CATEGORY_COUNT > CATEGORY.index then total = total + DecorInv.countInCategory(CATEGORY.index, session) end
+        if Decor.CATEGORY_COUNT > CATEGORY.index then
+          total = total + DecorInv.countInCategory(CATEGORY.index, session)
+        end
         return total
       end
     end)
@@ -756,7 +813,9 @@ return function(mod)
         if piece then return canPlacePiece(grid, place, piece) end
         -- A vanilla decoration may not land on this mod's furniture either.
         local width, height = Decor.dims(decor)
-        if state.active and footprintOverlap(place.x, footprintTop(place.y, height), width, height) then return false end
+        if state.active and footprintOverlap(place.x, footprintTop(place.y, height), width, height) then
+          return false
+        end
         return original(grid, place, decor, ...)
       end
     end)
@@ -782,7 +841,7 @@ return function(mod)
         local cell = state.art[cellKey(x, y)]
         for _, layer in ipairs(cell and cell.layers or {}) do
           local footprintLeft = x - layer.piece.art.x - layer.col
-          local footprintTopY = y - (layer.piece.art.y or 0) - layer.row
+          local footprintTopY = y - layer.piece.art.y - layer.row
           local retried = original(grid, context, footprintLeft, footprintTopY, ...)
           if #retried > 0 then return retried end
         end
@@ -858,7 +917,7 @@ return function(mod)
         local result = original(...)
         local loaded, err = pcall(onBaseLoaded)
         if not loaded then
-          state = { active = false }
+          deactivate()
           log("furniture disabled for this visit: %s", tostring(err))
         end
         return result
@@ -867,62 +926,15 @@ return function(mod)
 
     -- --- using the furniture
 
-    -- A person piece runs that person's script from the ROM, put under a key
-    -- of this mod's own beside it in the engine's script bundle
-    -- (Space.scriptKey finds a script by its key there), with what needs the
-    -- person there taken out of its first rows: turning to the player
-    -- (faceplayer, or applymovement and its waitmovement; a standing person
-    -- piece is drawn turned instead), and the lock and release of the one
-    -- object talked to, which become the lockall/releaseall of a background
-    -- event's script, as the rooftop machine's.
-    local PERSON_ROWS = {
-      lock = { op = "lockall", opcode = 105 },
-      release = { op = "releaseall", opcode = 107 },
-      faceplayer = false,
-      applymovement = false,
-      waitmovement = false,
-    }
-    local function personScript(piece)
-      local Space = engineModule(ENGINE.scriptSpace)
-      local scripts = Space and Space.bundle and Space.bundle.scripts
-      if type(scripts) ~= "table" then return nil end
-      local key = MOD_ID .. ":" .. piece.id
-      if rawget(scripts, key) == nil then
-        local original = scripts[piece.personScript]
-        if type(original) ~= "table" then
-          log("%s: no script %s", piece.id, tostring(piece.personScript))
-          return nil
-        end
-        local rows = {}
-        for _, row in ipairs(original) do
-          local replacement = PERSON_ROWS[row.op]
-          if replacement == nil then rows[#rows + 1] = row
-          elseif replacement then rows[#rows + 1] = replacement end
-        end
-        rawset(scripts, key, rows)
-      end
-      return key
-    end
-
-    -- The way a person faces to look at a player facing `facing`.
-    local FACING_BACK = { up = "down", down = "up", left = "right", right = "left",
-      [1] = "up", [2] = "down", [3] = "right", [4] = "left" }
-
     -- pokeemerald/src/field_control_avatar.c GetInteractedBackgroundEventScript
-    -- is where the field asks.  A piece runs its script from any side; if
-    -- fromBelow, only faced from below at its screen row, as the game's PCs
-    -- and TVs are (their behaviours' "facing up" rule); if it has a talkRow,
-    -- from any side at that row, a person's feet, turning them to the player.
-    -- (facing is a direction name or the engine's DIR_* number, 1 down.)
+    -- is where the field asks.  A person turns to the player before their
+    -- script runs.
     wrap(SB, "interactBg", function(original)
       return function(x, y, facing, elevation)
         local cell = state.active and state.footprint[cellKey(x, y)]
         if cell and inOwnBase(currentSession()) then
           local piece = cell.piece
-          local reached
-          if piece.talkRow then reached = cell.row == piece.talkRow
-          else reached = not piece.fromBelow or (cell.row == piece.screenRow and (facing == "up" or facing == 2)) end
-          if not reached then return false end
+          if not reachedBy(piece, cell, facing) then return false end
           local label = piece.personScript and personScript(piece) or piece.script
           if label == nil then return false end
           if piece.art.facing and FACING_BACK[facing] then
@@ -953,7 +965,7 @@ return function(mod)
     -- an indoor map with a show on air, off once it has been watched), which
     -- finds them by their TELEVISION behaviour.  This mod's TV has none, so
     -- it follows the same call.
-    wrap(engineModule(ENGINE.tv), "setScreens", function(original)
+    wrap(Tv, "setScreens", function(original)
       return function(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         local count = original(layout, behaviorAt, setMetatile, isTv, metatile, ...)
         if state.active and layout == state.layout then
@@ -963,7 +975,6 @@ return function(mod)
         return count
       end
     end)
-
   end
 
   install()
