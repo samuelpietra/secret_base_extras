@@ -10,7 +10,7 @@
 #
 # The engine is read from the newest update payload, and the tests run on a
 # copy of the app's LÖVE without its game.love, which would otherwise start
-# the game instead of the test.
+# the game instead of the test.  Exits non-zero on a failure.
 set -eu
 
 TESTS=$(cd "$(dirname "$0")" && pwd)
@@ -43,3 +43,8 @@ for test in lint render engine save integration; do
   kill "$pid" 2>/dev/null || true
   cat "$WORK/$test.log"
 done
+failed=0
+[ "$(grep -c '	ok$' "$WORK/lint.log")" -eq 7 ] || failed=1
+grep -qx "OK slots	35" "$WORK/render.log" || failed=1
+for test in engine save integration; do grep -qx "ALL PASS" "$WORK/$test.log" || failed=1; done
+exit "$failed"
