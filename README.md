@@ -158,9 +158,11 @@ does both checks and the publishing:
 The other tests read the imported ROM or your save, so CI cannot run them:
 `tests/run.sh` before every commit is what covers them.
 
-Push commits with their tags: `git push --follow-tags`. GitHub sends no tag
-events for a push of more than three tags; release such a push by hand from
-**Actions → Release → Run workflow**, naming the newest tag.
+Tag each commit with an annotated tag, `git tag -a vX.Y.Z -m vX.Y.Z`, and push
+commits with their tags: `git push --follow-tags`, which sends annotated tags
+only. GitHub sends no tag events for a push of more than three tags; release
+such a push by hand from **Actions → Release → Run workflow**, naming the
+newest tag.
 
 ### Packaging
 
