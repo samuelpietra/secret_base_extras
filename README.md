@@ -123,7 +123,7 @@ feat(extra): bed, PC and TV in an EXTRA decoration category
 refactor(save): move save compatibility into its own module
 ```
 
-Types in use: `feat`, `fix`, `refactor`, `docs`, `chore`.
+Types in use: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `ci`.
 
 ### Versioning
 
@@ -137,12 +137,12 @@ Types in use: `feat`, `fix`, `refactor`, `docs`, `chore`.
 | Backward compatible bug fix | patch |
 
 **A local convention worth stating, because it departs from the spec:**
-`refactor` and `docs` also bump the patch version here. SemVer versions
-releases rather than commits, so a pure refactor normally waits for the next
-release instead of earning a version of its own. In this repository every
-commit is a build that gets installed and played, and two different builds must
-never both claim the same version — otherwise there is no way to tell which one
-is running.
+`refactor`, `docs`, `test`, `chore` and `ci` also bump the patch version here.
+SemVer versions releases rather than commits, so a pure refactor normally waits
+for the next release instead of earning a version of its own. In this
+repository every commit is a build that gets installed and played, and two
+different builds must never both claim the same version — otherwise there is no
+way to tell which one is running.
 
 Keep `manifest.json`'s `version` field in step with the tag.
 
