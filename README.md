@@ -29,7 +29,7 @@ with your base.
 | | |
 |---|---|
 | Game | Pokémon Emerald |
-| Engine | gen1recomp 0.3.85 or newer (the version it was validated on) |
+| Engine | gen1recomp 0.3.80 or newer (played on 0.3.85; 0.3.80–0.3.88 pass the offline tests) |
 | Mod API | 2 |
 | Permissions | `engine_internals` |
 
