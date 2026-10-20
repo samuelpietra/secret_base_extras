@@ -7,8 +7,14 @@ caught before a build is installed and played. Run them all with:
 tests/run.sh
 ```
 
-They need the gen1recomp install this mod sits in (macOS, portable), an
-imported Emerald ROM, and a save in `saves/emerald/slot1.lua`. The script
+`tests/ci.sh` runs `lint` alone, the one test that needs no ROM, with the
+system's LÖVE; GitHub Actions runs it on every push and pull request, and
+before every release. The others read the imported ROM or your save, which
+never leave your machine, so `tests/run.sh` before every commit is what runs
+them.
+
+`tests/run.sh` needs the gen1recomp install this mod sits in (macOS, portable),
+an imported Emerald ROM, and a save in `saves/emerald/slot1.lua`. The script
 extracts the newest engine payload and a copy of the app's LÖVE into
 `$TMPDIR/secret_base_extras-tests`.
 

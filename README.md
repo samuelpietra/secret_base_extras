@@ -66,6 +66,13 @@ Mods are loaded when gen1recomp starts. After enabling or disabling the mod,
 quit the game and start it again from gen1recomp; going back to the title
 screen is not enough.
 
+## Updating
+
+The manifest names this repository (`github`), so gen1recomp's Mod Manager
+checks its [releases](https://github.com/samuelpietra/secret_base_extras/releases)
+and offers a newer one with an **Update** button; **Check for updates** asks
+again right away instead of waiting for the six-hour cache.
+
 ## Using it
 
 At the PC in your own Secret Base, choose **DECORATION → DECORATE**. The
@@ -139,10 +146,26 @@ is running.
 
 Keep `manifest.json`'s `version` field in step with the tag.
 
+A release players can update to is a GitHub release of that tag with the zip
+from `package.sh` attached; pushing a commit updates no one. GitHub Actions
+does both checks and the publishing:
+
+| Workflow | When | What |
+|---|---|---|
+| `ci.yml` | every push to `main` and pull request | `tests/ci.sh` (lint, the one test that needs no ROM); every pushed commit raises the version and carries its tag |
+| `release.yml` | a pushed tag `v*` | lint again, then a GitHub release of the tag with the zip attached and the commit message as its notes |
+
+The other tests read the imported ROM or your save, so CI cannot run them:
+`tests/run.sh` before every commit is what covers them.
+
+Push commits with their tags: `git push --follow-tags`. GitHub sends no tag
+events for a push of more than three tags; release such a push by hand from
+**Actions → Release → Run workflow**, naming the newest tag.
+
 ### Packaging
 
 `./package.sh` writes the install zip of the release `manifest.json` names to
-`~/Desktop/secret_base_extras-v<version>.zip`: the files of its tag, in a
+`~/Desktop/secret_base_extras-<version>.zip`: the files of its tag, in a
 `secret_base_extras` folder, without the tests and tooling (`.gitattributes`
 marks them `export-ignore`). It stops if that version has no tag yet.
 
@@ -167,4 +190,5 @@ marks them `export-ignore`). It stops if that version has no tag yet.
 | `lib/atlas.lua` | Composes the furniture over the base's own floor into a tileset of the mod's own. |
 | `lib/menu.lua` | The two DECORATE pictures the mod draws: the scrolling category list and the placement preview. |
 | `lib/save_compat.lua` | Writes saves the game understands without the mod, and puts the furniture back on load. |
-| `tests/` | Offline tests, run with `tests/run.sh` (see `tests/README.md`). |
+| `tests/` | Offline tests, run with `tests/run.sh`; `tests/ci.sh` runs lint in CI (see `tests/README.md`). |
+| `.github/` | The CI and release workflows, and the check that every commit is a tagged release. |
