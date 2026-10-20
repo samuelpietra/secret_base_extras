@@ -21,7 +21,8 @@ PAYLOAD=$(ls -t "$HOME/Library/Application Support/pokemon-love2d/updates/"gen1r
 [ -n "$PAYLOAD" ] || PAYLOAD="$INSTALL/gen1recomp.app/Contents/Resources/game.love"
 
 mkdir -p "$WORK"
-if [ ! -f "$WORK/engine.from" ] || [ "$(cat "$WORK/engine.from")" != "$PAYLOAD" ]; then
+# macOS empties old files under $TMPDIR, so the extracted engine is checked too
+if [ ! -f "$WORK/engine/main.lua" ] || [ "$(cat "$WORK/engine.from" 2>/dev/null)" != "$PAYLOAD" ]; then
   rm -rf "$WORK/engine" && mkdir -p "$WORK/engine"
   unzip -q -o "$PAYLOAD" -d "$WORK/engine"
   echo "$PAYLOAD" > "$WORK/engine.from"
